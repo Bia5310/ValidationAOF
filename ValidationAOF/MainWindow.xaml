@@ -97,7 +97,8 @@
                             <TextBox Grid.Row="0" Grid.Column="1" Margin="1" x:Name="tb_exposure"/>
 
                             <TextBlock Grid.Row="0" Grid.Column="2" Text="Число пикселей" Margin="1"/>
-                            <TextBox Grid.Row="0" Grid.Column="3" Margin="1" IsReadOnly="True"/>
+                            <TextBox Grid.Row="0" Grid.Column="3" Margin="1" IsReadOnly="True"
+                                     Name="numOfPixels"/>
                         </Grid>
 
                         <TextBlock Text="Диапазон работы прибора:"/>
@@ -204,7 +205,8 @@
                             </StackPanel>
 
                             <Button Content="Захватить" Margin="3" Name="Button_CaptureMaximumCurve"
-                                    Click="Button_CaptureMaximumCurve_Click"/>
+                                    Click="Button_CaptureMaximumCurve_Click"
+                                    />
                             <UniformGrid Columns="2">
                                 <Button Content="Сохранить" Margin="3"/>
                                 <Button Content="Загрузить" Margin="3"/>

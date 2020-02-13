@@ -16,12 +16,15 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
-using AvestaSpectrometr;
 using OxyPlot;
 using OxyPlot.Series;
 using AO_Lib;
 using static AO_Lib.AO_Devices;
 using Microsoft.Win32;
+using System.Windows.Interop;
+using Spectrometer;
+using System.Runtime.ExceptionServices;
+using System.Security;
 
 namespace ValidationAOF
 {
@@ -47,6 +50,39 @@ namespace ValidationAOF
             worker_sequenceMax.WorkerReportsProgress = true;
             worker_sequenceMax.WorkerSupportsCancellation = true;
             worker_sequenceMax.DoWork += Worker_sequenceMax_DoWork;
+
+            //MessageBox.Show(new Win32Exception().Message);
+            //InitCCDUSB();
+        }
+
+        [HandleProcessCorruptedStateExceptions]
+        private void InitCCDUSB()
+        {
+            int id = 0;
+            string str = "";
+            bool inited = UsbCCD.CCD_Init(new WindowInteropHelper(this).Handle, str, ref id);
+            //Get serium
+            //string serium = "";
+            //inited = UsbCCD.CCD_GetSerialNum(0, ref serium);
+            
+            //MessageBox.Show(serium.ToString());
+            //listBox1.Items.Add("Serium number: " + serium);
+            //listBox1.Items.Add("SensorName: " + UsbCCD.CCD_GetSensorName(0));
+            //Get ID
+            //inited = UsbCCD.CCD_GetID(serium, ref ID);
+            //listBox1.Items.Add("ID: " + ID.ToString());
+            //Fill params
+            //ExtendParams = new UsbCCD.TCCDUSBExtendParams();
+            //inited = UsbCCD.CCD_GetExtendParameters(0, ref ExtendParams);
+            //Params = new UsbCCD.TCCDUSBParams();
+            //inited = UsbCCD.CCD_GetParameters(0, ref Params);
+            /*
+            uint status = 0;
+            UsbCCD.CCD_GetMeasureStatus(0, ref status);
+            listBox1.Items.Add(status.ToString());
+            */
+            if (!inited)
+                MessageBox.Show("InitError");
         }
 
         private void Worker_sequenceMax_DoWork(object sender, DoWorkEventArgs e)
@@ -64,9 +100,6 @@ namespace ValidationAOF
 
             }
             catch (Exception) { }
-
-
-
         }
 
         BackgroundWorker worker_sequenceMax = null;
@@ -134,9 +167,11 @@ namespace ValidationAOF
 
         private void OnStopCapturing()
         {
-
+            
         }
 
+        //[HandleProcessCorruptedStateExceptions]
+        //[SecurityCritical]
         private void Button_plug_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -148,13 +183,14 @@ namespace ValidationAOF
                 else
                 {
                     avesta = Avesta.ConnectToFitstDevice();
-
+                    //string sensorName = UsbCCD.CCD_GetSensorName(0);
+                    //MessageBox.Show(sensorName);
                     tb_exposure.Text = avesta.ExtendParameters.sExposureTime.ToString(CultureInfo.InvariantCulture);
                 }
             }
             catch (Exception exc)
             {
-
+                MessageBox.Show(exc.Message);
             }
         }
 
@@ -189,16 +225,40 @@ namespace ValidationAOF
 
         private void Button_apply_click(object sender, RoutedEventArgs e)
         {
+            if(avesta == null)
+            {
+                MessageBox.Show("Спектрометр не подключен");
+                return;
+            }
+
             float exptime = 0;
             if (float.TryParse(tb_exposure.Text, out exptime))
             {
                 UsbCCD.CCD_SetParameter(avesta.ID, UsbCCD.PRM_EXPTIME, exptime);
             }
+
+            //запомним диапазон работы прибора по длинам волн
+            try
+            {
+                if (double.TryParse(TextBox_StartAvestaWL.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out avesta.wavelength_start) &&
+                    double.TryParse(TextBox_EndAvestaWL.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out avesta.wavelength_end))
+                {
+                    if (avesta.wavelength_end < avesta.wavelength_start)
+                    {
+                        throw new Exception("Start wavelength > end wavelength");
+                    }
+                }
+            }
+            catch (Exception) { }
+
+
         }
 
         private AO_Filter AOFilter = null;
         private bool devLoaded = false;
         private bool attenuationAvailable = false;
+        //double avestaStartWL = 0;
+        //double avestaEndWL = 0;
 
         public string InvariantCulture { get; private set; }
 
@@ -423,7 +483,131 @@ namespace ValidationAOF
 
         private void Button_CaptureMaximumCurve_Click(object sender, RoutedEventArgs e)
         {
+            if(avesta == null)
+            {
+                MessageBox.Show("Спектрометр не подключен");
+                return;
+            }
 
+            if(AOFilter == null)
+            {
+                MessageBox.Show("Фильтр не подключен");
+                return;
+            }
+
+            DataToCaptureSpectralCurves dataToCapture = new DataToCaptureSpectralCurves
+            {
+                startCapWL = 0,
+                endCapWL = 0,
+                stepCapWL = 0,
+                numberOfFrames = 0
+            };
+
+            try
+            {
+                if (avesta.wavelength_start >= avesta.wavelength_end)
+                {
+                    throw new Exception("Предельный диапазон длин волн спектрометра не введен или введен неверно");
+                }
+
+                if (double.TryParse(textBoxStart.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.startCapWL) &&
+                    double.TryParse(textBoxEnd.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.endCapWL) &&
+                    double.TryParse(textBoxStep.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.stepCapWL) &&
+                    int.TryParse(TextBox_CountMaxCurvesAvrg.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.numberOfFrames)) 
+                {
+                    if (dataToCapture.startCapWL > dataToCapture.endCapWL)
+                    {
+                        throw new Exception("Начальная длина волны больше конечной или совпадают");
+                    }
+                    if((dataToCapture.endCapWL - dataToCapture.startCapWL) < dataToCapture.stepCapWL)
+                    {
+                        throw new Exception("Шаг слишком велик");
+                    }
+                    if(dataToCapture.numberOfFrames < 1)
+                    {
+                        throw new Exception("Число кадров для усреднения должно быть > 0");
+                    }
+                    if (dataToCapture.stepCapWL <= 0)
+                    {
+                        throw new Exception("Шаг должен быть > 0");
+                    }
+                    //Проверим, а не слишком ли мал шаг
+                    
+                    //coming soon
+                    
+                }
+                else
+                {
+                    throw new Exception("Введены неправильные значения параметров захвата");
+                }
+
+                if(avesta.wavelength_end < dataToCapture.endCapWL || avesta.wavelength_start > dataToCapture.startCapWL)
+                {
+                    throw new Exception("Спектрометр не работает в таких границах");
+                }
+            }
+            catch(Exception ex) {
+                MessageBox.Show(ex.Message);
+                return;
+            }
+
+            if(backgroundWorkerLivespectr.IsBusy)
+            {
+                MessageBox.Show("Остановите захват кривой");
+                return;
+            }
+
+            BackgroundWorker backWorkerCapCurve = new BackgroundWorker();
+            backWorkerCapCurve.DoWork += BackWorkerCapCurve_DoWork;
+            backWorkerCapCurve.RunWorkerCompleted += BackWorkerCapCurve_RunWorkerCompleted;
+            backWorkerCapCurve.RunWorkerAsync(dataToCapture);
+        }
+
+        private void BackWorkerCapCurve_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            //TextBlock_StatusMaximumCurve.Text = (e.Result as string);
+        }
+
+        private void BackWorkerCapCurve_DoWork(object sender, DoWorkEventArgs e) //Захватывает кривую спектральных максимумов
+        {
+            DataToCaptureSpectralCurves dataToCapture = (DataToCaptureSpectralCurves) (e.Argument);
+
+            try
+            {
+                double actual_WL = dataToCapture.startCapWL;
+
+                while(actual_WL <= dataToCapture.endCapWL)
+                {
+                    // 1) - set wavelength
+                    float wl = (float)actual_WL;
+                    if(wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max)
+                    {
+                        AOFilter.Set_Wl(wl);
+                    }
+                    // 2) Снять усредненную кривую
+                    CaptureAveragedSpectralCurve(dataToCapture.numberOfFrames, out double[] avrData);
+                    // 3) Учесть чувствительность матрицы &
+                    // 4) Определить точку максимума (длину волны)
+                    
+                    for(int i = 0; i < avrData.Length; i++)
+                    {
+                        avrData[i] / avesta.Sensivity();
+                    }
+
+                    // 5) Добавить точку в список
+
+                }
+                
+                
+
+                
+                
+            }
+            catch(Exception ex)
+            {
+
+            }
+            
         }
 
         private void Button_acc_Checked(object sender, RoutedEventArgs e)
@@ -431,9 +615,19 @@ namespace ValidationAOF
 
         }
 
+
+
         private struct DataToCaptureWidespec
         {
             public int N;
+        }
+
+        private struct DataToCaptureSpectralCurves
+        {
+            public double startCapWL;
+            public double endCapWL;
+            public double stepCapWL;
+            public int numberOfFrames;
         }
 
         private void Button_CaptureWidespec_Click(object sender, RoutedEventArgs e)
@@ -454,8 +648,9 @@ namespace ValidationAOF
 
             if(backgroundWorkerLivespectr.IsBusy)
             {
-                backgroundWorkerLivespectr.RunWorkerCompleted += BackgroundWorkerLivespectr_RunWorkerCompleted;
-                backgroundWorkerLivespectr.CancelAsync();
+                //backgroundWorkerLivespectr.RunWorkerCompleted += BackgroundWorkerLivespectr_RunWorkerCompleted;
+                //backgroundWorkerLivespectr.CancelAsync();
+                MessageBox.Show("Остановите запись перед началом захвата кривой");
                 return;
             }
 
@@ -467,8 +662,14 @@ namespace ValidationAOF
 
         private void BackWorkerCapWideSpec_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            double[] avrgData = (double[])e.Result;
+            if(e.Cancelled)
+            {
+                TextBlock_StatusWidespec.Text = "Неудачно";
+                return;
+            }
 
+            double[] avrgData = (double[])e.Result;
+            
             //На график
 
             (chart.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Clear();
@@ -481,6 +682,8 @@ namespace ValidationAOF
             chart.ActualModel.InvalidatePlot(true);
 
             ((BackgroundWorker)sender).Dispose();
+
+            TextBlock_StatusWidespec.Text = "Захвачено " + avrgData.Length.ToString() + " точек";
         }
 
         private void BackgroundWorkerLivespectr_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
@@ -497,34 +700,39 @@ namespace ValidationAOF
             DataToCaptureWidespec capData = (DataToCaptureWidespec)e.Argument;
             try
             {
-                int[][] data = new int[capData.N][];
-
-                for(int i = 0; i < capData.N; i++)
-                {
-                    data[i] = avesta.GetData();
-                }
-
-                if(data.Length > 0)
-                {
-                    double[] avrData = new double[data[0].Length];
-                    for(int i = 0; i < data[0].Length; i++)
-                    {
-                        for(int j = 0; j < data.Length; j++)
-                        {
-                            avrData[i] += data[j][i];
-                        }
-                        avrData[i] /= data.Length;
-                    }
-
-                    e.Result = avrData;
-                }
-                
+                CaptureAveragedSpectralCurve(capData.N, out double[] avrData);
+                e.Result = avrData;
             }
             catch (Exception) { }
         }
 
-
         private int[] WideSpectr = null;
+
+        private void CaptureAveragedSpectralCurve(in int N, out double[] avrData)
+        {
+            int[][] data = new int[N][];
+            
+            for (int i = 0; i < N; i++)
+            {
+                data[i] = avesta.GetData();
+            }
+
+            avrData = new double[data[0].Length];
+
+            if (data.Length > 0)
+            {
+                for (int i = 0; i < data[0].Length; i++)
+                {
+                    for (int j = 0; j < data.Length; j++)
+                    {
+                        avrData[i] += data[j][i];
+                    }
+                    avrData[i] /= data.Length;
+                }
+            }
+            else
+                throw new Exception("N should be >= 1");
+        }
 
     }
 
@@ -547,6 +755,32 @@ namespace ValidationAOF
             DataPlot = new PlotModel();
             lineSeries = new LineSeries();
             DataPlot.Series.Add(lineSeries);
+        }
+    }
+
+    public class PointD
+    {
+        private double x = 0, y = 0;
+        public double X
+        {
+            get { return x; }
+            set { x = value; }
+        }
+        public double Y
+        {
+            get { return y; }
+            set { y = value; }
+        }
+
+        public PointD()
+        {
+            x = 0; y = 0;
+        }
+
+        public PointD(double X, double Y)
+        {
+            x = X;
+            y = Y;
         }
     }
 }

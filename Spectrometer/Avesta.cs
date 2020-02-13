@@ -1,6 +1,4 @@
-﻿using IvanMath;
-using OxyPlot;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -18,8 +16,6 @@ namespace Spectrometer
 
         public double wavelength_start = 0;
         public double wavelength_end = 0;
-
-        public List<DataPoint> senses = new List<DataPoint>(); // массив чувствительности
 
         public TCCDUSBExtendParams ExtendParameters
         {
@@ -106,41 +102,13 @@ namespace Spectrometer
         {
             //load file
             //---
-            wavelength_start = 450; //nm //from file
-            wavelength_end = 1200; //nm //from file
+            wavelength_start = 450; //nm
+            wavelength_end = 1200; //nm
 
-            InitSensivity(); //via file
-
-            //from file
-            Index2WavelengthAprox.B0 = wavelength_start;
-            Index2WavelengthAprox.B1 = (wavelength_end - wavelength_start)/parameters.nNumPixels;
-            Index2WavelengthAprox.AproxType = Aprox.AproxTypes.Linear;
+            return 
         }
 
-        Aprox Index2WavelengthAprox = new Aprox();
 
-        public void InitSensivity()
-        {
-            //должно быть рассчитано
-            senses = new List<DataPoint> { new DataPoint(wavelength_start, 1), new DataPoint(wavelength_end, 1) };
-        }
-
-        private double[] sensivityArray = null; //массив чувствительностей ка каждом пикселе линейки
-
-        public double Sensivity(double wavelength)
-        {
-            return MMath.Interp(wavelength, senses);
-        }
-
-        public double GetSensivityInPixel(int index)
-        {
-            return senses[index].X;
-        }
-
-        public double Index2Wavelength(int pixelIndex)
-        {
-            return Index2WavelengthAprox.Function(pixelIndex);
-        }
     }
 
     public class UsbCCD
