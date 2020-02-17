@@ -33,6 +33,25 @@ namespace ValidationAOF
     /// </summary>
     public partial class MainWindow : Window
     {
+
+        public Avesta avesta = null;
+        private BackgroundWorker backgroundWorkerLivespectr = new BackgroundWorker();
+        private bool stopCapture = false;
+
+        BackgroundWorker worker_sequenceMax = null;
+
+        float timeInterval = 50; //ms
+        public bool capturing = false;
+
+
+        //Данные захвата
+        List<DataPoint> CurveSpecWide = new List<DataPoint>();
+        List<DataPoint> CurveSpecWidePx = new List<DataPoint>();
+        List<DataPoint> CurveSpecMaxes = new List<DataPoint>();
+        List<DataPoint> CurveSpecMaxesPx = new List<DataPoint>();
+        List<double> CurveDeviationWL = new List<double>();
+        List<DataPoint> CurveTransmission = new List<DataPoint>();
+
         public MainWindow()
         {
             InitializeComponent();
@@ -85,46 +104,6 @@ namespace ValidationAOF
                 MessageBox.Show("InitError");
         }
 
-        private void Worker_sequenceMax_DoWork(object sender, DoWorkEventArgs e)
-        {
-            try
-            {
-                double start = double.Parse(textBoxStart.Text);
-                double end = double.Parse(textBoxEnd.Text);
-                double step = double.Parse(textBoxStep.Text);
-
-                float wl_start = (float)start;
-                float wl_end = (float)end;
-                float wl_step = (float)step;
-
-
-            }
-            catch (Exception) { }
-        }
-
-        BackgroundWorker worker_sequenceMax = null;
-
-        PlotViewModel plotViewModel = new PlotViewModel();
-
-        float timeInterval = 50; //ms
-        public bool capturing = false;
-
-        private void BackgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
-        {
-            int[] data = (int[])e.UserState;
-
-            (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.Clear();
-            List<DataPoint> dataPoints = new List<DataPoint>();
-            for (int i = 0; i < data.Length; i++)
-            {
-                dataPoints.Add(new DataPoint(i, data[i]));
-            }
-            (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.AddRange(dataPoints);
-            chart.ActualModel.InvalidatePlot(true);
-
-
-        }
-
         private void BackgroundWorker_DoWork(object sender, DoWorkEventArgs e)
         {
             try
@@ -138,6 +117,7 @@ namespace ValidationAOF
                     if (avesta != null)
                     {
                         int[] data = avesta.GetData();
+
                         backgroundWorkerLivespectr.ReportProgress(0, data);
                     }
 
@@ -156,9 +136,38 @@ namespace ValidationAOF
             capturing = false;
         }
 
-        public Avesta avesta = null;
-        private BackgroundWorker backgroundWorkerLivespectr = new BackgroundWorker();
-        private bool stopCapture = false;
+        private void BackgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            int[] data = (int[])e.UserState;
+
+            (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.Clear();
+            List<DataPoint> dataPoints = new List<DataPoint>();
+            for (int i = 0; i < data.Length; i++)
+            {
+                dataPoints.Add(new DataPoint(avesta.Index2Wavelength(i), data[i]));
+            }
+            (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.AddRange(dataPoints);
+            chart.ActualModel.InvalidatePlot(true);
+
+
+        }
+
+        private void Worker_sequenceMax_DoWork(object sender, DoWorkEventArgs e)
+        {
+            try
+            {
+                double start = double.Parse(textBoxStart.Text);
+                double end = double.Parse(textBoxEnd.Text);
+                double step = double.Parse(textBoxStep.Text);
+
+                float wl_start = (float)start;
+                float wl_end = (float)end;
+                float wl_step = (float)step;
+
+
+            }
+            catch (Exception) { }
+        }
 
         private void OnStartCapturing()
         {
@@ -183,6 +192,10 @@ namespace ValidationAOF
                 else
                 {
                     avesta = Avesta.ConnectToFitstDevice();
+                    if(avesta != null)
+                    {
+                        avesta.LoadConfigFile("");
+                    }
                     //string sensorName = UsbCCD.CCD_GetSensorName(0);
                     //MessageBox.Show(sensorName);
                     tb_exposure.Text = avesta.ExtendParameters.sExposureTime.ToString(CultureInfo.InvariantCulture);
@@ -478,7 +491,13 @@ namespace ValidationAOF
 
         private void Button_CalculateTrans_Click(object sender, RoutedEventArgs e)
         {
-
+            if(CurveSpecMaxes.Count == 0 || CurveSpecWide.Count == 0)
+            {
+                TextBlock_StatusTrans.Text = "Не загружены спектральные кривые";
+                return;
+            }
+            
+            
         }
 
         private void Button_CaptureMaximumCurve_Click(object sender, RoutedEventArgs e)
@@ -565,21 +584,22 @@ namespace ValidationAOF
 
         private void BackWorkerCapCurve_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            List<DataPoint> listCurve = e.Result as List<DataPoint>;
+            if(e.Cancelled)
+            {
+                TextBlock_StatusMaximumCurve.Text = "Неудачно";
+                return;
+            }
 
             //На график
-
             (chart.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.Clear();
 
-            (chart.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.AddRange(listCurve);
+            (chart.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.AddRange(CurveSpecMaxes);
             chart.ActualModel.InvalidatePlot(true);
 
             ((BackgroundWorker)sender).Dispose();
 
-            TextBlock_StatusWidespec.Text = "Захвачено " + listCurve.Count.ToString() + " точек";
+            TextBlock_StatusMaximumCurve.Text = "Захвачено " + CurveSpecMaxes.Count.ToString() + " точек";
         }
-
-        
 
         private void BackWorkerCapCurve_DoWork(object sender, DoWorkEventArgs e) //Захватывает кривую спектральных максимумов
         {
@@ -588,9 +608,12 @@ namespace ValidationAOF
             try
             {
                 double actual_WL = dataToCapture.startCapWL;
-                
-                List<PointD> listCurvesMax = new List<PointD>();
-                listCurvesMax.Clear();
+
+                /*List<PointD> listCurvesMax = new List<PointD>();
+                listCurvesMax.Clear();*/
+
+                CurveSpecMaxes.Clear();
+                CurveSpecMaxesPx.Clear();
 
                 while(actual_WL <= dataToCapture.endCapWL)
                 {
@@ -612,7 +635,7 @@ namespace ValidationAOF
                     double value = 1;
                     for(int i = 0; i < avrData.Length; i++)
                     {
-                        value = avrData[i] / avesta.Sensitivity[i];
+                        value = avrData[i] / avesta.Sensitivitys[i];
                         if (i == 0)
                         {
                             minValue = value;
@@ -629,15 +652,17 @@ namespace ValidationAOF
                             minValue = value;
                             minIndex = i;
                         }
-                        
-
                     }
 
                     // 5) Добавить точку в список
-                    listCurvesMax.Add(new PointD(maxIndex, maxValue));
+                    double real_WL = avesta.Index2Wavelength(maxIndex); //длина волны, на которой получился максимум в реальности
+
+                    CurveSpecMaxesPx.Add(new DataPoint(maxIndex, maxValue));
+                    CurveSpecMaxes.Add(new DataPoint(real_WL, maxValue));
+                    CurveDeviationWL.Add(real_WL - actual_WL);
                 }
 
-                e.Result = listCurvesMax;
+                e.Result = CurveSpecMaxes;
             }
             catch(Exception ex)
             {
@@ -709,12 +734,12 @@ namespace ValidationAOF
             //На график
 
             (chart.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Clear();
-            List<DataPoint> dataPoints = new List<DataPoint>();
+            /*List<DataPoint> dataPoints = new List<DataPoint>();
             for (int i = 0; i < avrgData.Length; i++)
             {
-                dataPoints.Add(new DataPoint(i, avrgData[i]));
-            }
-            (chart.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.AddRange(dataPoints);
+                dataPoints.Add(new DataPoint(avesta.Index2Wavelength(i), avrgData[i]));
+            }*/
+            (chart.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.AddRange(CurveSpecWide);
             chart.ActualModel.InvalidatePlot(true);
 
             ((BackgroundWorker)sender).Dispose();
@@ -738,6 +763,14 @@ namespace ValidationAOF
             {
                 CaptureAveragedSpectralCurve(capData.N, out double[] avrData);
                 e.Result = avrData;
+
+                CurveSpecWidePx.Clear();
+                CurveSpecWide.Clear();
+                for(int i = 0; i < avrData.Length; i++)
+                {
+                    CurveSpecWidePx.Add(new DataPoint(i, avrData[i]));
+                    CurveSpecWide.Add(new DataPoint(avesta.Index2Wavelength(i), avrData[i]));
+                }
             }
             catch (Exception) { }
         }
@@ -770,6 +803,90 @@ namespace ValidationAOF
                 throw new Exception("N should be >= 1");
         }
 
+        private void Capture_I_K_Click(object sender, RoutedEventArgs e)
+        {
+            //захват зависимости I от k
+
+            if (avesta == null)
+            {
+                MessageBox.Show("Спектрометр не подключен");
+                return;
+            }
+
+            if (AOFilter == null)
+            {
+                MessageBox.Show("Фильтр не подключен");
+                return;
+            }
+
+            DataToCaptureSpectralCurves dataToCapture = new DataToCaptureSpectralCurves
+            {
+                startCapWL = 0,
+                endCapWL = 0,
+                stepCapWL = 0,
+                numberOfFrames = 0
+            };
+
+            try
+            {
+                if (avesta.wavelength_start >= avesta.wavelength_end)
+                {
+                    throw new Exception("Предельный диапазон длин волн спектрометра не введен или введен неверно");
+                }
+
+                if (double.TryParse(textBoxStartK.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.startCapWL) &&
+                    double.TryParse(textBoxEndK.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.endCapWL) &&
+                    double.TryParse(textBoxStepK.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.stepCapWL))
+                {
+                    if (dataToCapture.startCapWL > dataToCapture.endCapWL)
+                    {
+                        throw new Exception("Начальная длина волны больше конечной или совпадают");
+                    }
+                    if ((dataToCapture.endCapWL - dataToCapture.startCapWL) < dataToCapture.stepCapWL)
+                    {
+                        throw new Exception("Шаг слишком велик");
+                    }
+                    if (dataToCapture.numberOfFrames < 1)
+                    {
+                        throw new Exception("Число кадров для усреднения должно быть > 0");
+                    }
+                    if (dataToCapture.stepCapWL <= 0)
+                    {
+                        throw new Exception("Шаг должен быть > 0");
+                    }
+                    //Проверим, а не слишком ли мал шаг
+
+                    //coming soon
+
+                }
+                else
+                {
+                    throw new Exception("Введены неправильные значения параметров захвата");
+                }
+
+                if (avesta.wavelength_end < dataToCapture.endCapWL || avesta.wavelength_start > dataToCapture.startCapWL)
+                {
+                    throw new Exception("Спектрометр не работает в таких границах");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+                return;
+            }
+
+            if (backgroundWorkerLivespectr.IsBusy)
+            {
+                MessageBox.Show("Остановите захват кривой");
+                return;
+            }
+
+            BackgroundWorker backWorkerCapCurve = new BackgroundWorker();
+            backWorkerCapCurve.DoWork += BackWorkerCapCurve_DoWork;
+            backWorkerCapCurve.RunWorkerCompleted += BackWorkerCapCurve_RunWorkerCompleted;
+            backWorkerCapCurve.RunWorkerAsync(dataToCapture);
+        }
+    }
     }
 
     public class PlotViewModel

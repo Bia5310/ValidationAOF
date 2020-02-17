@@ -125,18 +125,19 @@ namespace Spectrometer
             //должно быть считано из файла
             sensititvityList = new List<DataPoint> { new DataPoint(wavelength_start, 1), new DataPoint(wavelength_end, 1) };
             //Рассчитаем чувствительность в каждом пикселе или считываем её из файла
-            for(int i = 0; i < parameters.nNumPixels; i++)
+            sensitivitys = new double[parameters.nNumPixels];
+            for (int i = 0; i < parameters.nNumPixels; i++)
             {
-                sensitivity[i] = SensivityByWavelength(Index2Wavelength(i));
+                sensitivitys[i] = SensivityByWavelength(Index2Wavelength(i));
             }
 
         }
 
-        private double[] sensitivity = null; //массив чувствительностей ка каждом пикселе линейки
-        public double[] Sensitivity
+        private double[] sensitivitys = null; //массив чувствительностей ка каждом пикселе линейки
+        public double[] Sensitivitys
         {
-            get { return sensitivity; }
-            set { sensitivity = value; }
+            get { return sensitivitys; }
+            set { sensitivitys = value; }
         }
 
         public double SensivityByWavelength(double wavelength)

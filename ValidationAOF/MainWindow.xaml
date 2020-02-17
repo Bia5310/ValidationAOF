@@ -7,7 +7,7 @@
         xmlns:local="clr-namespace:ValidationAOF"
         mc:Ignorable="d"
         Background="WhiteSmoke"
-        Title="MainWindow" Height="622" Width="960">
+        Title="MainWindow" Height="722" Width="960">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -81,7 +81,9 @@
                         <TextBlock Text="Спектрометр" Margin="2"/>
                         <UniformGrid Rows="1" Columns="2">
                             <Button Content="Подкл." Margin="2" x:Name="button_plug" Click="Button_plug_Click"/>
-                            <ToggleButton Style="{DynamicResource PlayPause}" Margin="2" x:Name="button_acc" Click="Button_acc_Click" Checked="Button_acc_Checked"/>
+                            <ToggleButton Style="{DynamicResource PlayPause}" Margin="2" x:Name="button_acc" 
+                                          Click="Button_acc_Click" 
+                                          Checked="Button_acc_Checked"/>
                         </UniformGrid>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -264,6 +266,28 @@
                                 <TextBlock Text="Статус: " Margin="4 0 2 0" Grid.Column="0" VerticalAlignment="Center"/>
                                 <TextBlock Text="---" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
                                            Name="TextBlock_StatusAtten"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <Grid Margin="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition/>
+                                        <RowDefinition/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="От" HorizontalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="До" HorizontalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" Text="Шаг" HorizontalAlignment="Center"/>
+
+                                    <TextBox x:Name="textBoxStartK" Grid.Row="1" Grid.Column="0" Text="" Margin="2"/>
+                                    <TextBox x:Name="textBoxEndK" Grid.Row="1" Grid.Column="1" Text="" Margin="2"/>
+                                    <TextBox x:Name="textBoxStepK" Grid.Row="1" Grid.Column="2" Text="" Margin="2"/>
+                                </Grid>
+                                <Button Content="Захват" Margin="2" x:Name="Capture_I_K" Click="Capture_I_K_Click"/>
                             </StackPanel>
                         </StackPanel>
                     </Expander>
