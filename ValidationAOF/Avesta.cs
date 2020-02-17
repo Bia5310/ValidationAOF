@@ -19,7 +19,7 @@ namespace Spectrometer
         public double wavelength_start = 0;
         public double wavelength_end = 0;
 
-        public List<DataPoint> senses = new List<DataPoint>(); // массив чувствительности
+        public List<DataPoint> sensititvityList = new List<DataPoint>(); // массив чувствительности
 
         public TCCDUSBExtendParams ExtendParameters
         {
@@ -119,22 +119,34 @@ namespace Spectrometer
 
         Aprox Index2WavelengthAprox = new Aprox();
 
+
         public void InitSensivity()
         {
-            //должно быть рассчитано
-            senses = new List<DataPoint> { new DataPoint(wavelength_start, 1), new DataPoint(wavelength_end, 1) };
+            //должно быть считано из файла
+            sensititvityList = new List<DataPoint> { new DataPoint(wavelength_start, 1), new DataPoint(wavelength_end, 1) };
+            //Рассчитаем чувствительность в каждом пикселе или считываем её из файла
+            for(int i = 0; i < parameters.nNumPixels; i++)
+            {
+                sensitivity[i] = SensivityByWavelength(Index2Wavelength(i));
+            }
+
         }
 
-        private double[] sensivityArray = null; //массив чувствительностей ка каждом пикселе линейки
-
-        public double Sensivity(double wavelength)
+        private double[] sensitivity = null; //массив чувствительностей ка каждом пикселе линейки
+        public double[] Sensitivity
         {
-            return MMath.Interp(wavelength, senses);
+            get { return sensitivity; }
+            set { sensitivity = value; }
+        }
+
+        public double SensivityByWavelength(double wavelength)
+        {
+            return MMath.Interp(wavelength, sensititvityList);
         }
 
         public double GetSensivityInPixel(int index)
         {
-            return senses[index].X;
+            return sensititvityList[index].X;
         }
 
         public double Index2Wavelength(int pixelIndex)

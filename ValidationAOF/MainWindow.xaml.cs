@@ -565,8 +565,21 @@ namespace ValidationAOF
 
         private void BackWorkerCapCurve_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            //TextBlock_StatusMaximumCurve.Text = (e.Result as string);
+            List<DataPoint> listCurve = e.Result as List<DataPoint>;
+
+            //На график
+
+            (chart.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.Clear();
+
+            (chart.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.AddRange(listCurve);
+            chart.ActualModel.InvalidatePlot(true);
+
+            ((BackgroundWorker)sender).Dispose();
+
+            TextBlock_StatusWidespec.Text = "Захвачено " + listCurve.Count.ToString() + " точек";
         }
+
+        
 
         private void BackWorkerCapCurve_DoWork(object sender, DoWorkEventArgs e) //Захватывает кривую спектральных максимумов
         {
@@ -575,6 +588,9 @@ namespace ValidationAOF
             try
             {
                 double actual_WL = dataToCapture.startCapWL;
+                
+                List<PointD> listCurvesMax = new List<PointD>();
+                listCurvesMax.Clear();
 
                 while(actual_WL <= dataToCapture.endCapWL)
                 {
@@ -588,20 +604,40 @@ namespace ValidationAOF
                     CaptureAveragedSpectralCurve(dataToCapture.numberOfFrames, out double[] avrData);
                     // 3) Учесть чувствительность матрицы &
                     // 4) Определить точку максимума (длину волны)
-                    
+
+                    double minValue = 0;
+                    int minIndex = 0;
+                    double maxValue = 0;
+                    int maxIndex = 0;
+                    double value = 1;
                     for(int i = 0; i < avrData.Length; i++)
                     {
-                        avrData[i] / avesta.Sensivity();
+                        value = avrData[i] / avesta.Sensitivity[i];
+                        if (i == 0)
+                        {
+                            minValue = value;
+                            maxValue = value;
+                        }
+
+                        if (value > maxValue)
+                        {
+                            maxValue = value;
+                            maxIndex = i;
+                        }
+                        if (value < minValue)
+                        {
+                            minValue = value;
+                            minIndex = i;
+                        }
+                        
+
                     }
 
                     // 5) Добавить точку в список
-
+                    listCurvesMax.Add(new PointD(maxIndex, maxValue));
                 }
-                
-                
 
-                
-                
+                e.Result = listCurvesMax;
             }
             catch(Exception ex)
             {

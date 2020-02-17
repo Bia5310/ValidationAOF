@@ -32,6 +32,7 @@
                 <oxy:Plot.Series>
                     <oxy:LineSeries Color="Blue"/>
                     <oxy:LineSeries Color="Red"/>
+                    <oxy:LineSeries Color="Green"/>
                 </oxy:Plot.Series>
             </oxy:Plot>
 
