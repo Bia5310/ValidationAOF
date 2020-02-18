@@ -25,6 +25,7 @@ using System.Windows.Interop;
 using Spectrometer;
 using System.Runtime.ExceptionServices;
 using System.Security;
+using System.IO;
 
 namespace ValidationAOF
 {
@@ -49,8 +50,9 @@ namespace ValidationAOF
         List<DataPoint> CurveSpecWidePx = new List<DataPoint>();
         List<DataPoint> CurveSpecMaxes = new List<DataPoint>();
         List<DataPoint> CurveSpecMaxesPx = new List<DataPoint>();
-        List<double> CurveDeviationWL = new List<double>();
+        List<DataPoint> CurveDeviationWL = new List<DataPoint>();
         List<DataPoint> CurveTransmission = new List<DataPoint>();
+        List<DataPoint> CurveIntensityFromAtten = new List<DataPoint>(); //actual_WL, real_WL - actual_WL
 
         public MainWindow()
         {
@@ -260,9 +262,14 @@ namespace ValidationAOF
                     {
                         throw new Exception("Start wavelength > end wavelength");
                     }
+
+                    avesta.InitSensivityAndPolynom();
                 }
             }
-            catch (Exception) { }
+            catch (Exception exc)
+            {
+                MessageBox.Show(exc.Message);
+            }
 
 
         }
@@ -659,7 +666,7 @@ namespace ValidationAOF
 
                     CurveSpecMaxesPx.Add(new DataPoint(maxIndex, maxValue));
                     CurveSpecMaxes.Add(new DataPoint(real_WL, maxValue));
-                    CurveDeviationWL.Add(real_WL - actual_WL);
+                    CurveDeviationWL.Add(new DataPoint(actual_WL, real_WL - actual_WL));
                 }
 
                 e.Result = CurveSpecMaxes;
@@ -689,6 +696,15 @@ namespace ValidationAOF
             public double endCapWL;
             public double stepCapWL;
             public int numberOfFrames;
+        }
+
+        private struct DataToCaptureCurve_I_K
+        {
+            public double startCapK;
+            public double endCapK;
+            public double stepCapK;
+            public int numberOfFrames;
+            public double wavelength;
         }
 
         private void Button_CaptureWidespec_Click(object sender, RoutedEventArgs e)
@@ -819,12 +835,13 @@ namespace ValidationAOF
                 return;
             }
 
-            DataToCaptureSpectralCurves dataToCapture = new DataToCaptureSpectralCurves
+            DataToCaptureCurve_I_K dataToCapture = new DataToCaptureCurve_I_K
             {
-                startCapWL = 0,
-                endCapWL = 0,
-                stepCapWL = 0,
-                numberOfFrames = 0
+                startCapK = 0,
+                endCapK = 0,
+                stepCapK = 0,
+                numberOfFrames = 1,
+                wavelength = 0,
             };
 
             try
@@ -834,15 +851,16 @@ namespace ValidationAOF
                     throw new Exception("Предельный диапазон длин волн спектрометра не введен или введен неверно");
                 }
 
-                if (double.TryParse(textBoxStartK.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.startCapWL) &&
-                    double.TryParse(textBoxEndK.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.endCapWL) &&
-                    double.TryParse(textBoxStepK.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.stepCapWL))
+                if (double.TryParse(textBoxStartK.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.startCapK) &&
+                    double.TryParse(textBoxEndK.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.endCapK) &&
+                    double.TryParse(textBoxStepK.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.stepCapK) &&
+                    double.TryParse(textBoxWavelength_I_K.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.wavelength))
                 {
-                    if (dataToCapture.startCapWL > dataToCapture.endCapWL)
+                    if (dataToCapture.startCapK > dataToCapture.endCapK)
                     {
                         throw new Exception("Начальная длина волны больше конечной или совпадают");
                     }
-                    if ((dataToCapture.endCapWL - dataToCapture.startCapWL) < dataToCapture.stepCapWL)
+                    if ((dataToCapture.endCapK - dataToCapture.startCapK) < dataToCapture.stepCapK)
                     {
                         throw new Exception("Шаг слишком велик");
                     }
@@ -850,7 +868,11 @@ namespace ValidationAOF
                     {
                         throw new Exception("Число кадров для усреднения должно быть > 0");
                     }
-                    if (dataToCapture.stepCapWL <= 0)
+                    if (dataToCapture.wavelength < AOFilter.WL_Min || dataToCapture.wavelength > AOFilter.WL_Max)
+                    {
+                        throw new Exception("Длина волны вне диапазона");
+                    }
+                    if (dataToCapture.stepCapK <= 0)
                     {
                         throw new Exception("Шаг должен быть > 0");
                     }
@@ -864,7 +886,7 @@ namespace ValidationAOF
                     throw new Exception("Введены неправильные значения параметров захвата");
                 }
 
-                if (avesta.wavelength_end < dataToCapture.endCapWL || avesta.wavelength_start > dataToCapture.startCapWL)
+                if (avesta.wavelength_end < dataToCapture.endCapK || avesta.wavelength_start > dataToCapture.startCapK)
                 {
                     throw new Exception("Спектрометр не работает в таких границах");
                 }
@@ -875,18 +897,112 @@ namespace ValidationAOF
                 return;
             }
 
+            if(AOFilter.FilterType != FilterTypes.STC_Filter)
+            {
+                MessageBox.Show("Данная опеация не поддерживается этим типом фильтра");
+                return;
+            }
+
             if (backgroundWorkerLivespectr.IsBusy)
             {
                 MessageBox.Show("Остановите захват кривой");
                 return;
             }
 
-            BackgroundWorker backWorkerCapCurve = new BackgroundWorker();
-            backWorkerCapCurve.DoWork += BackWorkerCapCurve_DoWork;
-            backWorkerCapCurve.RunWorkerCompleted += BackWorkerCapCurve_RunWorkerCompleted;
-            backWorkerCapCurve.RunWorkerAsync(dataToCapture);
+            BackgroundWorker backWorkerCapCurve_I_K = new BackgroundWorker();
+            backWorkerCapCurve_I_K.DoWork += BackWorkerCapCurve_I_K_DoWork;
+            backWorkerCapCurve_I_K.RunWorkerCompleted += BackWorkerCapCurve_I_K_RunWorkerCompleted;
+            backWorkerCapCurve_I_K.RunWorkerAsync(dataToCapture);
         }
-    }
+
+        private void BackWorkerCapCurve_I_K_DoWork(object sender, DoWorkEventArgs e)
+        {
+            DataToCaptureCurve_I_K dataToCapture = (DataToCaptureCurve_I_K)e.Result;
+            try
+            {
+                double actual_K = dataToCapture.startCapK;
+                int index = avesta.Wavelength2Index(dataToCapture.wavelength);
+                
+                // 0) Установить длину волны
+                float wl = (float)dataToCapture.wavelength;
+                if (wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max)
+                {
+                    AOFilter.Set_Wl(wl);
+                }
+                float hz = AOFilter.Get_HZ_via_WL(wl);
+
+                STC_Filter STCFilter = (STC_Filter)AOFilter;
+
+                CurveIntensityFromAtten.Clear();
+
+                while (actual_K <= dataToCapture.endCapK)
+                {
+                    // 1) Установить ослабление
+                    if (wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max && actual_K >= 1700 && actual_K <= 2500)
+                    {
+                        STCFilter.Set_Hz(hz, (float)actual_K);
+                    }
+                    // 2) Снять кривую
+                    int[] avrData = avesta.GetData();
+
+                    // 3) Добавить точку в список
+                    CurveIntensityFromAtten.Add(new DataPoint(actual_K, avrData[index]));
+                }
+
+                e.Result = CurveIntensityFromAtten;
+            }
+            catch(Exception ex)
+            {
+
+            }
+
+        }
+
+        private void BackWorkerCapCurve_I_K_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            if(e.Cancelled)
+            {
+                MessageBox.Show(e.Error.Message);
+                return;
+            }
+
+
+        }
+
+        private void B_Save_I_K_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (CurveIntensityFromAtten.Count > 0)
+                {
+                    SaveCurve2File(CurveIntensityFromAtten, "Curve_I_K.txt");
+                }
+                else
+                    throw new Exception("Кривая отсутствует");
+            }
+            catch(Exception exc)
+            {
+                MessageBox.Show(exc.Message);
+            }
+        }
+
+        private void B_I_K_ShowPlot_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        public static void SaveCurve2File(List<DataPoint> dataPoints, string filename)
+        {
+            using (var sw = new StreamWriter(filename))
+            {
+                for(int i = 0; i < dataPoints.Count; i++)
+                {
+                    sw.WriteLine(dataPoints[i].X + ' ' + dataPoints[i].Y);
+                }
+
+                sw.Dispose();
+            }
+        }
     }
 
     public class PlotViewModel

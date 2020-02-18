@@ -51,7 +51,7 @@ namespace Spectrometer
             return av;
         }
 
-        public int[] GetData()
+        public int[] GetData(bool correctSensetivity = true)
         {
             int pixels = extendedParameters.nNumPixelsH * 1;//ExtendParams.nNumPixelsH * ExtendParams.nNumPixelsV * ExtendParams.nNumReadOuts;
             int cb = pixels * sizeof(uint);
@@ -66,6 +66,12 @@ namespace Spectrometer
 
             Marshal.Copy(pData, data, 0, data.Length);
             Marshal.FreeHGlobal(pData);
+
+            if(correctSensetivity)
+                for(int i = 0; i < data.Length; i++)
+                {
+                    data[i] = (int)(data[i] / sensitivitys[i]);
+                }
 
             return data;
         }
@@ -109,23 +115,25 @@ namespace Spectrometer
             wavelength_start = 450; //nm //from file
             wavelength_end = 1200; //nm //from file
 
-            InitSensivity(); //via file
+            //from file B0...BN
 
-            //from file
-            Index2WavelengthAprox.B0 = wavelength_start;
-            Index2WavelengthAprox.B1 = (wavelength_end - wavelength_start)/parameters.nNumPixels;
-            Index2WavelengthAprox.AproxType = Aprox.AproxTypes.Linear;
+            InitSensivityAndPolynom(); //via file
+
         }
 
         Aprox Index2WavelengthAprox = new Aprox();
 
-
-        public void InitSensivity()
+        public void InitSensivityAndPolynom()
         {
             //должно быть считано из файла
             sensititvityList = new List<DataPoint> { new DataPoint(wavelength_start, 1), new DataPoint(wavelength_end, 1) };
             //Рассчитаем чувствительность в каждом пикселе или считываем её из файла
             sensitivitys = new double[parameters.nNumPixels];
+
+            Index2WavelengthAprox.B0 = wavelength_start;
+            Index2WavelengthAprox.B1 = (wavelength_end - wavelength_start) / parameters.nNumPixels;
+            Index2WavelengthAprox.AproxType = Aprox.AproxTypes.Linear;
+
             for (int i = 0; i < parameters.nNumPixels; i++)
             {
                 sensitivitys[i] = SensivityByWavelength(Index2Wavelength(i));
@@ -153,6 +161,27 @@ namespace Spectrometer
         public double Index2Wavelength(int pixelIndex)
         {
             return Index2WavelengthAprox.Function(pixelIndex);
+        }
+
+        public int Wavelength2Index(double wavelength)
+        {
+            double[] x = Index2WavelengthAprox.FunctionInv(wavelength);
+            if (Index2WavelengthAprox.AproxType == Aprox.AproxTypes.Linear)
+                return Convert.ToInt32(x[0]);
+            if (Index2WavelengthAprox.AproxType == Aprox.AproxTypes.Parabola2)
+            {
+                if (x[0] >= 0 && x[1] >= 0 && x[0] <= parameters.nNumPixels - 1 && x[1] <= parameters.nNumPixels - 1)
+                    throw new Exception("Оба корня внутри диапазона");
+                if (x[0] >= 0 && x[0] <= parameters.nNumPixels - 1)
+                    return Convert.ToInt32(x[0]);
+                else
+                if (x[1] >= 0 && x[1] <= parameters.nNumPixels - 1)
+                    return Convert.ToInt32(x[1]);
+                else
+                    throw new Exception("Корни находятся вне границ");
+            }
+            //default
+            return 0;
         }
     }
 

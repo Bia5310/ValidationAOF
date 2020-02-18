@@ -74,7 +74,9 @@ namespace IvanMath
         public double B3;
 
         public delegate double FunctionDelegate(double x);
+        public delegate double[] FunctionDelegateInv(double y);
         public FunctionDelegate Function;
+        public FunctionDelegateInv FunctionInv;
 
         public AproxTypes AproxType
         {
@@ -85,9 +87,24 @@ namespace IvanMath
                 {
                     case AproxTypes.Linear:
                         Function = (x) => B0 + B1 * x;
+                        FunctionInv = (y) => new double[]{ (y - B0) / B1 };
                         break;
                     case AproxTypes.Parabola2:
                         Function = (x) => B0 + B1 * x + B2 * x * x;
+                        FunctionInv = (y) =>
+                        {
+                            double D = (B1 * B1 - 4 * B2 * (B0-y));
+                            if (D < 0)
+                                throw new Exception("Отсутствуют действительные корни");
+                            D = Math.Sqrt(D);
+
+                            double[] x = new double[]
+                            {
+                                (-B1 + D)/(2*B2),
+                                (-B1 - D)/(2*B2)
+                            };
+                            return x;
+                        };
                         break;
                 }
             }
