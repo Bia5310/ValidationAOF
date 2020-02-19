@@ -309,12 +309,28 @@ namespace ValidationAOF
 
         private void InitSlidersByAOF()
         {
+            sliderWavelength.Minimum = AOFilter.WL_Min;
+            sliderWavelength.Maximum = AOFilter.WL_Max;
 
-            sliderAttenuation.Value = -10;
-            sliderAttenuation.Minimum = -20;
-            sliderAttenuation.Maximum = -30;
-            sliderAttenuation.Minimum = -40;
-            MessageBox.Show(sliderAttenuation.Value.ToString());
+            sliderWavelength.ValueChanged -= SliderWavelength_ValueChanged;
+            if(AOFilter.WL_Current != 0)
+            {
+                sliderWavelength.Value = AOFilter.WL_Current;
+            }
+            else
+            {
+                sliderWavelength.Value = (AOFilter.WL_Max + AOFilter.WL_Min)/ 2;
+            }
+            sliderWavelength.ValueChanged += SliderWavelength_ValueChanged;
+
+            sliderAttenuation.Maximum = 2500;
+            sliderAttenuation.Minimum = 1700;
+            sliderAttenuation.Value = 1700;
+
+            /*if(AOFilter.FilterType == FilterTypes.STC_Filter)
+            {
+                (AOFilter as STC_Filter).Set_Hz(AOFilter.HZ_Current, 1700);
+            }*/
         }
 
         private void ButtonConnectAOF_Click(object sender, RoutedEventArgs e)
@@ -362,6 +378,9 @@ namespace ValidationAOF
 
             sliderAttenuation.IsEnabled = attenuationAvailable;
             textBoxAttenuation.IsEnabled = attenuationAvailable;
+
+            if (loaded)
+                InitSlidersByAOF();
         }
 
         private void State_AOF_Power(bool powered)
@@ -428,21 +447,22 @@ namespace ValidationAOF
 
         private void SliderWavelength_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            //textBox
-            /*textBoxWavelength.BeginInit();
-            textBoxWavelength.Text = sliderWavelength.Value.ToString(InvariantCulture);
-            textBoxWavelength.EndInit();*/
-            //another sliders
+            if(AOFilter == null)
+            {
+                return;
+            }
 
+            textBoxWavelength.Text = sliderWavelength.Value.ToString("F3", CultureInfo.InvariantCulture);
+            float wl = (float) sliderWavelength.Value;
+            if(wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max)
+            {
+                AOFilter.Set_Wl(wl);
+            }
         }
 
         private void InitSlidersAndTextBoxes(double wavelength, double wavenumber, double frequency, double attenuation)
         {
-            //textBox
-            textBoxWavelength.BeginInit();
-            textBoxWavelength.Text = sliderWavelength.Value.ToString(InvariantCulture);
-            textBoxWavelength.EndInit();
-            //another sliders
+            
         }
 
         private void SliderWavenumber_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -457,6 +477,19 @@ namespace ValidationAOF
 
         private void SliderAttenuation_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if(AOFilter == null || AOFilter.FilterType != FilterTypes.STC_Filter)
+            {
+                return;
+            }
+            STC_Filter STCFilter = (STC_Filter)AOFilter;
+
+            textBoxAttenuation.Text = sliderAttenuation.Value.ToString("F3", CultureInfo.InvariantCulture);
+            float hz = (float)AOFilter.HZ_Current;
+            float K = (float)sliderAttenuation.Value;
+            if(hz >= AOFilter.HZ_Min && hz <= AOFilter.HZ_Max && K >= 1700 && K <= 2500)
+            {
+                STCFilter.Set_Hz(hz, K);
+            }
 
         }
 
@@ -667,6 +700,8 @@ namespace ValidationAOF
                     CurveSpecMaxesPx.Add(new DataPoint(maxIndex, maxValue));
                     CurveSpecMaxes.Add(new DataPoint(real_WL, maxValue));
                     CurveDeviationWL.Add(new DataPoint(actual_WL, real_WL - actual_WL));
+
+                    actual_WL += dataToCapture.stepCapWL;
                 }
 
                 e.Result = CurveSpecMaxes;
@@ -835,13 +870,19 @@ namespace ValidationAOF
                 return;
             }
 
+            if (AOFilter.FilterType != FilterTypes.STC_Filter)
+            {
+                MessageBox.Show("Данная опеация не поддерживается этим типом фильтра");
+                return;
+            }
+
             DataToCaptureCurve_I_K dataToCapture = new DataToCaptureCurve_I_K
             {
                 startCapK = 0,
                 endCapK = 0,
                 stepCapK = 0,
                 numberOfFrames = 1,
-                wavelength = 0,
+                wavelength = AOFilter.WL_Current,
             };
 
             try
@@ -885,21 +926,10 @@ namespace ValidationAOF
                 {
                     throw new Exception("Введены неправильные значения параметров захвата");
                 }
-
-                if (avesta.wavelength_end < dataToCapture.endCapK || avesta.wavelength_start > dataToCapture.startCapK)
-                {
-                    throw new Exception("Спектрометр не работает в таких границах");
-                }
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message);
-                return;
-            }
-
-            if(AOFilter.FilterType != FilterTypes.STC_Filter)
-            {
-                MessageBox.Show("Данная опеация не поддерживается этим типом фильтра");
                 return;
             }
 
@@ -909,15 +939,25 @@ namespace ValidationAOF
                 return;
             }
 
-            BackgroundWorker backWorkerCapCurve_I_K = new BackgroundWorker();
+            Progress_I_K.Visibility = Visibility.Visible;
+            backWorkerCapCurve_I_K = new BackgroundWorker();
             backWorkerCapCurve_I_K.DoWork += BackWorkerCapCurve_I_K_DoWork;
             backWorkerCapCurve_I_K.RunWorkerCompleted += BackWorkerCapCurve_I_K_RunWorkerCompleted;
+            backWorkerCapCurve_I_K.ProgressChanged += BackWorkerCapCurve_I_K_ProgressChanged;
             backWorkerCapCurve_I_K.RunWorkerAsync(dataToCapture);
+        }
+
+        BackgroundWorker backWorkerCapCurve_I_K = null;
+
+        private void BackWorkerCapCurve_I_K_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            Progress_I_K.Value = e.ProgressPercentage;
         }
 
         private void BackWorkerCapCurve_I_K_DoWork(object sender, DoWorkEventArgs e)
         {
-            DataToCaptureCurve_I_K dataToCapture = (DataToCaptureCurve_I_K)e.Result;
+            DataToCaptureCurve_I_K dataToCapture = (DataToCaptureCurve_I_K)e.Argument;
+
             try
             {
                 double actual_K = dataToCapture.startCapK;
@@ -947,6 +987,10 @@ namespace ValidationAOF
 
                     // 3) Добавить точку в список
                     CurveIntensityFromAtten.Add(new DataPoint(actual_K, avrData[index]));
+
+                    
+                    actual_K += dataToCapture.stepCapK;
+                    backWorkerCapCurve_I_K.ReportProgress(Convert.ToInt32((actual_K - dataToCapture.startCapK)/(dataToCapture.endCapK - dataToCapture.startCapK)));
                 }
 
                 e.Result = CurveIntensityFromAtten;
@@ -963,10 +1007,12 @@ namespace ValidationAOF
             if(e.Cancelled)
             {
                 MessageBox.Show(e.Error.Message);
+                textBlock_Status_I_K.Text = "Неудача";
                 return;
             }
 
-
+            textBlock_Status_I_K.Text = "Захвачено " + CurveIntensityFromAtten.Count.ToString() + " точек";
+            Progress_I_K.Visibility = Visibility.Collapsed;
         }
 
         private void B_Save_I_K_Click(object sender, RoutedEventArgs e)
@@ -1001,6 +1047,23 @@ namespace ValidationAOF
                 }
 
                 sw.Dispose();
+            }
+        }
+
+        private void Button_SaveTrans_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (CurveTransmission.Count > 0)
+                {
+                    SaveCurve2File(CurveTransmission, "Curve_Transmission.txt");
+                }
+                else
+                    throw new Exception("Кривая отсутствует");
+            }
+            catch (Exception exc)
+            {
+                MessageBox.Show(exc.Message);
             }
         }
     }

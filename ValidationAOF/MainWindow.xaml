@@ -37,7 +37,7 @@
             </oxy:Plot>
 
             <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal">
-                <Border MinWidth="250" Padding="2" BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2">
+                <Border MinWidth="300" Padding="2" BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2">
                     <StackPanel Margin="2 0 0 0">
                         <TextBlock Text="АОФ" Margin="2"/>
                         <UniformGrid Rows="1" Columns="3">
@@ -61,7 +61,8 @@
                             <Slider Grid.Row="0" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderWavelength" ValueChanged="SliderWavelength_ValueChanged"/>
                             <Slider Grid.Row="1" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderWavenumber" ValueChanged="SliderWavenumber_ValueChanged"/>
                             <Slider Grid.Row="2" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderFrequency" ValueChanged="SliderFrequency_ValueChanged"/>
-                            <Slider Grid.Row="3" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderAttenuation" ValueChanged="SliderAttenuation_ValueChanged"/>
+                            <Slider Grid.Row="3" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderAttenuation" ValueChanged="SliderAttenuation_ValueChanged"
+                                    Maximum="2500" Minimum="1700"/>
                             <TextBlock Text="λ, нм:" Grid.Row="0" Grid.Column="0" Margin="2"/>
                             <TextBlock Text="1/λ , см⁻¹:" Grid.Row="1" Grid.Column="0" Margin="2"/>
                             <TextBlock Text="f, Hz:" Grid.Row="2" Grid.Column="0" Margin="2"/>
@@ -154,7 +155,7 @@
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Text="Статус: " Margin="4 0 2 0" Grid.Column="0" VerticalAlignment="Center"/>
-                                <TextBlock Text="---" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
+                                <TextBlock Text="" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
                                            Name="TextBlock_StatusWidespec"/>
                                 <ProgressBar Value="60" Grid.Column="2" Margin="6 0 3 0" Visibility="Collapsed"/>
                             </Grid>
@@ -216,9 +217,10 @@
                             </UniformGrid>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Статус: " Margin="4 0 2 0" Grid.Column="0" VerticalAlignment="Center"/>
-                                <TextBlock Text="---" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
+                                <TextBlock Text="" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
                                            Name="TextBlock_StatusMaximumCurve"/>
                             </StackPanel>
+                            <ProgressBar Name="Progress_Maxes" Height="15" Visibility="Collapsed" Margin="2" Maximum="100"/>
                         </StackPanel>
                     </Expander>
                 </Border>
@@ -232,14 +234,19 @@
                 <Border BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2 1 2 0">
                     <Expander Header="Коэффициент пропускания" IsExpanded="True" Margin="2">
                         <StackPanel Margin="2">
-                            <Button Content="Рассчитать" Margin="2" Name="Button_CalculateTrans"
+                            <UniformGrid Columns="2">
+                                <Button Content="Рассчитать" Margin="2" Name="Button_CalculateTrans"
                                     Click="Button_CalculateTrans_Click"/>
+                                <Button Content="Сохранить" Margin="2" Name="Button_SaveTrans"
+                                    Click="Button_SaveTrans_Click"/>
+                            </UniformGrid>
 
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Статус: " Margin="4 0 2 0" Grid.Column="0" VerticalAlignment="Center"/>
-                                <TextBlock Text="---" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
+                                <TextBlock Text="" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
                                            Name="TextBlock_StatusTrans"/>
                             </StackPanel>
+                            <ProgressBar Name="Progress_Transp" Height="15" Visibility="Collapsed" Margin="2" Maximum="100"/>
                         </StackPanel>
                     </Expander>
                 </Border>
@@ -300,9 +307,10 @@
                                 </UniformGrid>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Статус: " Margin="4 0 2 0" Grid.Column="0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="---" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
-                                           Name="TextBlock_Status_I_K"/>
+                                    <TextBlock Text="" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
+                                           Name="textBlock_Status_I_K"/>
                                 </StackPanel>
+                                <ProgressBar Name="Progress_I_K" Height="15" Visibility="Collapsed" Margin="2" Maximum="100"/>
                             </StackPanel>
                         </StackPanel>
                     </Expander>
