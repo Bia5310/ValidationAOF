@@ -3,10 +3,12 @@ using OxyPlot;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Timers;
+using System.Xml;
 using static Spectrometer.UsbCCD;
 
 namespace Spectrometer
@@ -18,6 +20,9 @@ namespace Spectrometer
 
         public double wavelength_start = 0;
         public double wavelength_end = 0;
+
+        public string configFile = "";
+        public string sensivityFile = "";
 
         public List<DataPoint> sensititvityList = new List<DataPoint>(); // массив чувствительности
 
@@ -42,6 +47,7 @@ namespace Spectrometer
         public Avesta(int id)
         {
             this.id = id;
+            Index2WavelengthAprox.B0 = 222;
         }
 
         public static Avesta ConnectToFitstDevice()
@@ -108,38 +114,125 @@ namespace Spectrometer
             return devices;
         }
 
-        public void LoadConfigFile(string configPath)
+        public void LoadConfigFromFile(string configPath)
         {
-            //load file
-            //---
-            wavelength_start = 450; //nm //from file
-            wavelength_end = 1200; //nm //from file
+            XmlDocument xmlDoc = new XmlDocument();
+            xmlDoc.Load(configPath);
+            XmlElement configs = xmlDoc.DocumentElement;
+            XmlElement avestaXml = configs["Avesta"];
+            
+            if(avestaXml != null)
+            {
+                string attrVal = avestaXml.Attributes["WavelengthStart"]?.Value ?? "190";
+                wavelength_start = double.Parse(attrVal);
 
-            //from file B0...BN
+                attrVal = avestaXml.Attributes["WavelengthEnd"]?.Value ?? "1100";
+                wavelength_end = double.Parse(attrVal);
 
-            InitSensivityAndPolynom(); //via file
+                attrVal = avestaXml.Attributes["B0"]?.Value;
+                if (attrVal == null)
+                    Index2WavelengthAprox.B0 = wavelength_end;
+                else
+                    Index2WavelengthAprox.B0 = double.Parse(attrVal, NumberStyles.Float, CultureInfo.InvariantCulture);
 
+                attrVal = avestaXml.Attributes["B1"]?.Value;
+                if (attrVal == null)
+                    Index2WavelengthAprox.B1 = (wavelength_start - wavelength_end) / parameters.nNumPixels;
+                else
+                    Index2WavelengthAprox.B1 = double.Parse(attrVal, NumberStyles.Float, CultureInfo.InvariantCulture);
+
+                attrVal = avestaXml.Attributes["B2"]?.Value;
+                if (attrVal == null)
+                    Index2WavelengthAprox.B2 = 0;
+                else
+                    Index2WavelengthAprox.B2 = double.Parse(attrVal, NumberStyles.Float, CultureInfo.InvariantCulture);
+
+                attrVal = avestaXml.Attributes["AproxType"]?.Value;
+
+                if (attrVal != null && Enum.TryParse<Aprox.AproxTypes>(attrVal, out Aprox.AproxTypes aproxType))
+                    Index2WavelengthAprox.AproxType = aproxType;
+                else
+                    Index2WavelengthAprox.AproxType = Aprox.AproxTypes.Linear;
+
+                if (wavelength_start >= wavelength_end)
+                    throw new Exception("Некорректно задан спектральный диапазон прибора");
+
+                if (Index2WavelengthAprox.AproxType == Aprox.AproxTypes.Linear)
+                {
+                    if (Index2WavelengthAprox.B1 == 0)
+                        throw new Exception("B1 не должен быть равен 0");
+                }
+
+                if (Index2WavelengthAprox.AproxType == Aprox.AproxTypes.Parabola2)
+                {
+                    double extr = -Index2WavelengthAprox.B1 / (2 * Index2WavelengthAprox.B2);
+                    if (extr <= parameters.nNumPixels-1 && extr >= 0)
+                    {
+                        throw new Exception("Некорректные значения коэффициентов параболы.\nЭкстремум не должен находиться в рабочем диапазоне спектрометра");
+                    }
+                }
+
+                sensivityFile = avestaXml.Attributes["SensivityFile"]?.Value ?? "";
+                //Считываем кривую чувствительности
+                try
+                {
+                    string[] allLines = File.ReadAllLines(sensivityFile);
+                    if (allLines.Length < 3)
+                        throw new Exception();
+
+                    string signature = allLines[0];
+
+                    if (signature.ToLower() == "wavelength_sensivity")
+                    {
+                        sensititvityList.Clear();
+                        for (int i = 1; i < allLines.Length; i++)
+                        {
+                            LineSplitter(allLines[i], out double xi, out double yi);
+                            sensititvityList.Add(new DataPoint(xi, yi));
+                        }
+                        for (int i = 0; i < parameters.nNumPixels; i++)
+                        {
+                            sensitivitys[i] = SensivityByWavelength(Index2Wavelength(i));
+                        }
+                    }
+                    if (signature.ToLower() == "sensivity_in_pixel")
+                    {
+                        if (allLines.Length != parameters.nNumPixels)
+                            throw new Exception();
+                        sensititvityList.Clear();
+
+                        for (int i = 1; i < allLines.Length; i++)
+                        {
+                            sensitivitys[i] = int.Parse(allLines[i], NumberStyles.Float, CultureInfo.InvariantCulture);
+                            sensititvityList.Add(new DataPoint(Index2Wavelength(i), sensitivitys[i]));
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    sensititvityList.Clear();
+                    sensititvityList.Add(new DataPoint(wavelength_start, 1));
+                    sensititvityList.Add(new DataPoint(wavelength_end, 1));
+
+                    sensitivitys = new double[parameters.nNumPixels];
+                    for (int i = 0; i < parameters.nNumPixels; i++)
+                    {
+                        sensitivitys[i] = SensivityByWavelength(Index2Wavelength(i));
+                    }
+                }
+            }
+            //InitSensivityAndPolynom(); //via file
+
+        }
+
+        private static void LineSplitter(string line, out double d0, out double d1)
+        {
+            string[] values = line.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            d0 = double.Parse(values[0], NumberStyles.Float, CultureInfo.InvariantCulture);
+            d1 = double.Parse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture);
         }
 
         Aprox Index2WavelengthAprox = new Aprox();
-
-        public void InitSensivityAndPolynom()
-        {
-            //должно быть считано из файла
-            sensititvityList = new List<DataPoint> { new DataPoint(wavelength_start, 1), new DataPoint(wavelength_end, 1) };
-            //Рассчитаем чувствительность в каждом пикселе или считываем её из файла
-            sensitivitys = new double[parameters.nNumPixels];
-
-            Index2WavelengthAprox.B0 = wavelength_start;
-            Index2WavelengthAprox.B1 = (wavelength_end - wavelength_start) / parameters.nNumPixels;
-            Index2WavelengthAprox.AproxType = Aprox.AproxTypes.Linear;
-
-            for (int i = 0; i < parameters.nNumPixels; i++)
-            {
-                sensitivitys[i] = SensivityByWavelength(Index2Wavelength(i));
-            }
-
-        }
 
         private double[] sensitivitys = null; //массив чувствительностей ка каждом пикселе линейки
         public double[] Sensitivitys

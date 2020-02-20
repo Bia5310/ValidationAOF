@@ -196,7 +196,14 @@ namespace ValidationAOF
                     avesta = Avesta.ConnectToFitstDevice();
                     if(avesta != null)
                     {
-                        avesta.LoadConfigFile("");
+                        try
+                        {
+                            avesta.LoadConfigFromFile("ConfigFile.xml");
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(ex.Message);
+                        }
                     }
                     //string sensorName = UsbCCD.CCD_GetSensorName(0);
                     //MessageBox.Show(sensorName);
@@ -251,7 +258,7 @@ namespace ValidationAOF
             {
                 UsbCCD.CCD_SetParameter(avesta.ID, UsbCCD.PRM_EXPTIME, exptime);
             }
-
+            /*
             //запомним диапазон работы прибора по длинам волн
             try
             {
@@ -262,14 +269,12 @@ namespace ValidationAOF
                     {
                         throw new Exception("Start wavelength > end wavelength");
                     }
-
-                    avesta.InitSensivityAndPolynom();
                 }
             }
             catch (Exception exc)
             {
                 MessageBox.Show(exc.Message);
-            }
+            }*/
 
 
         }
@@ -311,21 +316,24 @@ namespace ValidationAOF
         {
             sliderWavelength.Minimum = AOFilter.WL_Min;
             sliderWavelength.Maximum = AOFilter.WL_Max;
+            sliderWavelength.Value = (AOFilter.WL_Max + AOFilter.WL_Min) / 2;
+            textBoxWavelength.Text = sliderWavelength.Value.ToString("F2", CultureInfo.InvariantCulture);
 
-            sliderWavelength.ValueChanged -= SliderWavelength_ValueChanged;
+            /*sliderWavelength.ValueChanged -= SliderWavelength_ValueChanged;
             if(AOFilter.WL_Current != 0)
             {
                 sliderWavelength.Value = AOFilter.WL_Current;
             }
             else
             {
-                sliderWavelength.Value = (AOFilter.WL_Max + AOFilter.WL_Min)/ 2;
+                
             }
-            sliderWavelength.ValueChanged += SliderWavelength_ValueChanged;
+            sliderWavelength.ValueChanged += SliderWavelength_ValueChanged;*/
 
             sliderAttenuation.Maximum = 2500;
             sliderAttenuation.Minimum = 1700;
             sliderAttenuation.Value = 1700;
+            textBoxAttenuation.Text = sliderAttenuation.Value.ToString("F2", CultureInfo.InvariantCulture);
 
             /*if(AOFilter.FilterType == FilterTypes.STC_Filter)
             {
@@ -378,9 +386,6 @@ namespace ValidationAOF
 
             sliderAttenuation.IsEnabled = attenuationAvailable;
             textBoxAttenuation.IsEnabled = attenuationAvailable;
-
-            if (loaded)
-                InitSlidersByAOF();
         }
 
         private void State_AOF_Power(bool powered)
@@ -452,7 +457,7 @@ namespace ValidationAOF
                 return;
             }
 
-            textBoxWavelength.Text = sliderWavelength.Value.ToString("F3", CultureInfo.InvariantCulture);
+            textBoxWavelength.Text = sliderWavelength.Value.ToString("F2", CultureInfo.InvariantCulture);
             float wl = (float) sliderWavelength.Value;
             if(wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max)
             {
@@ -483,7 +488,7 @@ namespace ValidationAOF
             }
             STC_Filter STCFilter = (STC_Filter)AOFilter;
 
-            textBoxAttenuation.Text = sliderAttenuation.Value.ToString("F3", CultureInfo.InvariantCulture);
+            textBoxAttenuation.Text = sliderAttenuation.Value.ToString("F2", CultureInfo.InvariantCulture);
             float hz = (float)AOFilter.HZ_Current;
             float K = (float)sliderAttenuation.Value;
             if(hz >= AOFilter.HZ_Min && hz <= AOFilter.HZ_Max && K >= 1700 && K <= 2500)
@@ -616,11 +621,22 @@ namespace ValidationAOF
                 return;
             }
 
-            BackgroundWorker backWorkerCapCurve = new BackgroundWorker();
+            Progress_Maxes.Visibility = Visibility.Visible;
+            backWorkerCapCurve = new BackgroundWorker();
             backWorkerCapCurve.DoWork += BackWorkerCapCurve_DoWork;
+            backWorkerCapCurve.WorkerReportsProgress = true;
+            backWorkerCapCurve.WorkerSupportsCancellation = true;
+            backWorkerCapCurve.ProgressChanged += BackWorkerCapCurve_ProgressChanged;
             backWorkerCapCurve.RunWorkerCompleted += BackWorkerCapCurve_RunWorkerCompleted;
             backWorkerCapCurve.RunWorkerAsync(dataToCapture);
         }
+
+        private void BackWorkerCapCurve_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            Progress_Maxes.Value = e.ProgressPercentage;
+        }
+
+        BackgroundWorker backWorkerCapCurve = null;
 
         private void BackWorkerCapCurve_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
@@ -639,6 +655,7 @@ namespace ValidationAOF
             ((BackgroundWorker)sender).Dispose();
 
             TextBlock_StatusMaximumCurve.Text = "Захвачено " + CurveSpecMaxes.Count.ToString() + " точек";
+            Progress_Maxes.Visibility = Visibility.Collapsed;
         }
 
         private void BackWorkerCapCurve_DoWork(object sender, DoWorkEventArgs e) //Захватывает кривую спектральных максимумов
@@ -654,15 +671,19 @@ namespace ValidationAOF
 
                 CurveSpecMaxes.Clear();
                 CurveSpecMaxesPx.Clear();
+                CurveDeviationWL.Clear();
 
-                while(actual_WL <= dataToCapture.endCapWL)
+                while (actual_WL <= dataToCapture.endCapWL)
                 {
                     // 1) - set wavelength
                     float wl = (float)actual_WL;
-                    if(wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max)
+                    if (wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max)
                     {
                         AOFilter.Set_Wl(wl);
                     }
+                    else
+                        break;
+
                     // 2) Снять усредненную кривую
                     CaptureAveragedSpectralCurve(dataToCapture.numberOfFrames, out double[] avrData);
                     // 3) Учесть чувствительность матрицы &
@@ -702,6 +723,7 @@ namespace ValidationAOF
                     CurveDeviationWL.Add(new DataPoint(actual_WL, real_WL - actual_WL));
 
                     actual_WL += dataToCapture.stepCapWL;
+                    backWorkerCapCurve.ReportProgress(Convert.ToInt32(100*(actual_WL-dataToCapture.startCapWL)/(dataToCapture.endCapWL-dataToCapture.startCapWL)));
                 }
 
                 e.Result = CurveSpecMaxes;
@@ -767,9 +789,17 @@ namespace ValidationAOF
             }
 
             BackgroundWorker backWorkerCapWideSpec = new BackgroundWorker();
+            backWorkerCapWideSpec.WorkerReportsProgress = true;
+            backWorkerCapWideSpec.WorkerSupportsCancellation = true;
+            backWorkerCapWideSpec.ProgressChanged += BackWorkerCapWideSpec_ProgressChanged;
             backWorkerCapWideSpec.DoWork += BackWorkerCapWideSpec_DoWork;
             backWorkerCapWideSpec.RunWorkerCompleted += BackWorkerCapWideSpec_RunWorkerCompleted;
             backWorkerCapWideSpec.RunWorkerAsync(dataToCapture);
+        }
+
+        private void BackWorkerCapWideSpec_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            
         }
 
         private void BackWorkerCapWideSpec_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
@@ -941,6 +971,8 @@ namespace ValidationAOF
 
             Progress_I_K.Visibility = Visibility.Visible;
             backWorkerCapCurve_I_K = new BackgroundWorker();
+            backWorkerCapCurve_I_K.WorkerReportsProgress = true;
+            backWorkerCapCurve_I_K.WorkerSupportsCancellation = true;
             backWorkerCapCurve_I_K.DoWork += BackWorkerCapCurve_I_K_DoWork;
             backWorkerCapCurve_I_K.RunWorkerCompleted += BackWorkerCapCurve_I_K_RunWorkerCompleted;
             backWorkerCapCurve_I_K.ProgressChanged += BackWorkerCapCurve_I_K_ProgressChanged;
@@ -961,14 +993,15 @@ namespace ValidationAOF
             try
             {
                 double actual_K = dataToCapture.startCapK;
-                int index = avesta.Wavelength2Index(dataToCapture.wavelength);
-                
+                //int index = avesta.Wavelength2Index(dataToCapture.wavelength); //правильность зависит от качества калибровки. Лучше искать максимум
+                int indexMax = 0;
                 // 0) Установить длину волны
                 float wl = (float)dataToCapture.wavelength;
                 if (wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max)
                 {
                     AOFilter.Set_Wl(wl);
                 }
+                
                 float hz = AOFilter.Get_HZ_via_WL(wl);
 
                 STC_Filter STCFilter = (STC_Filter)AOFilter;
@@ -982,15 +1015,25 @@ namespace ValidationAOF
                     {
                         STCFilter.Set_Hz(hz, (float)actual_K);
                     }
+                    else
+                        break;
+
                     // 2) Снять кривую
                     int[] avrData = avesta.GetData();
 
-                    // 3) Добавить точку в список
-                    CurveIntensityFromAtten.Add(new DataPoint(actual_K, avrData[index]));
+                    indexMax = 0;
+                    for(int i = 1; i< avrData.Length; i++)
+                    {
+                        if (avrData[i] > avrData[indexMax])
+                            indexMax = i;
+                    }
 
-                    
+                    // 3) Добавить точку в список
+                    CurveIntensityFromAtten.Add(new DataPoint(actual_K, avrData[indexMax]));
+
                     actual_K += dataToCapture.stepCapK;
-                    backWorkerCapCurve_I_K.ReportProgress(Convert.ToInt32((actual_K - dataToCapture.startCapK)/(dataToCapture.endCapK - dataToCapture.startCapK)));
+                    
+                    backWorkerCapCurve_I_K.ReportProgress(Convert.ToInt32(100*(actual_K - dataToCapture.startCapK)/(dataToCapture.endCapK - dataToCapture.startCapK)));
                 }
 
                 e.Result = CurveIntensityFromAtten;
@@ -1043,7 +1086,7 @@ namespace ValidationAOF
             {
                 for(int i = 0; i < dataPoints.Count; i++)
                 {
-                    sw.WriteLine(dataPoints[i].X + ' ' + dataPoints[i].Y);
+                    sw.WriteLine(dataPoints[i].X.ToString("F", CultureInfo.InvariantCulture) + ' ' + dataPoints[i].Y.ToString("F", CultureInfo.InvariantCulture));
                 }
 
                 sw.Dispose();
@@ -1057,6 +1100,86 @@ namespace ValidationAOF
                 if (CurveTransmission.Count > 0)
                 {
                     SaveCurve2File(CurveTransmission, "Curve_Transmission.txt");
+                }
+                else
+                    throw new Exception("Кривая отсутствует");
+            }
+            catch (Exception exc)
+            {
+                MessageBox.Show(exc.Message);
+            }
+        }
+
+        private void TextBoxWavelength_KeyDown(object sender, KeyEventArgs e)
+        {
+            double value = 0;
+            if(double.TryParse(textBoxWavelength.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            {
+                sliderWavelength.Value = value;
+            }
+        }
+
+        private void TextBoxAttenuation_KeyDown(object sender, KeyEventArgs e)
+        {
+            double value = 0;
+            if (double.TryParse(textBoxAttenuation.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            {
+                sliderAttenuation.Value = value;
+            }
+        }
+
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void ButtonSaveWideSpec_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (CurveSpecWide.Count > 0)
+                {
+                    SaveCurve2File(CurveSpecWide, "Curve_WideSpec.txt");
+                    SaveCurve2File(CurveSpecWidePx, "Curve_WideSpecPx.txt");
+                }
+                else
+                    throw new Exception("Кривая отсутствует");
+            }
+            catch (Exception exc)
+            {
+                MessageBox.Show(exc.Message);
+            }
+        }
+
+        private void ButtonLoadWideSpec_Click(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void ReloadConfig_Click(object sender, RoutedEventArgs e)
+        {
+            if(avesta != null)
+            {
+                try
+                {
+                    avesta.LoadConfigFromFile("ConfigFile.xml");
+                }
+                catch(Exception exc)
+                {
+                    MessageBox.Show(exc.Message);
+                }
+            }
+        }
+
+        private void Button_SaveCurveMaxes_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (CurveSpecMaxes.Count > 0)
+                {
+                    SaveCurve2File(CurveSpecMaxes, "Curve_Maxes.txt");
+                    SaveCurve2File(CurveSpecMaxesPx, "Curve_MaxesPx.txt");
+                    SaveCurve2File(CurveDeviationWL, "Curve_Deviations.txt");
                 }
                 else
                     throw new Exception("Кривая отсутствует");

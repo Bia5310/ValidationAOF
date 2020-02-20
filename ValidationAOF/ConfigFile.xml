@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<configurations>
+  <Avesta WavelengthStart="190"
+    WavelengthEnd="1100"
+    B0="1.13895762931882E+3"
+    B1="-2.64634383386945E-1"
+    B2="-6.0410488905703E-7"
+    AproxType="Parabola2">
+  </Avesta>
+</configurations>
+
+  

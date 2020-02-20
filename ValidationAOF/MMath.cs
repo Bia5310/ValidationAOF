@@ -83,6 +83,7 @@ namespace IvanMath
             get { return aproxType; }
             set
             {
+                aproxType = value;
                 switch (value)
                 {
                     case AproxTypes.Linear:

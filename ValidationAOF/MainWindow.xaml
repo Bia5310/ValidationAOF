@@ -62,29 +62,31 @@
                             <Slider Grid.Row="1" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderWavenumber" ValueChanged="SliderWavenumber_ValueChanged"/>
                             <Slider Grid.Row="2" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderFrequency" ValueChanged="SliderFrequency_ValueChanged"/>
                             <Slider Grid.Row="3" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderAttenuation" ValueChanged="SliderAttenuation_ValueChanged"
-                                    Maximum="2500" Minimum="1700"/>
+                                    Maximum="2500" Minimum="1700" Value="1700"/>
                             <TextBlock Text="λ, нм:" Grid.Row="0" Grid.Column="0" Margin="2"/>
                             <TextBlock Text="1/λ , см⁻¹:" Grid.Row="1" Grid.Column="0" Margin="2"/>
                             <TextBlock Text="f, Hz:" Grid.Row="2" Grid.Column="0" Margin="2"/>
                             <TextBlock Text="Ослабл. K:" Grid.Row="3" Grid.Column="0" Margin="2"/>
-                            <TextBox Grid.Row="0" Grid.Column="2" Margin="2" IsEnabled="False" x:Name="textBoxWavelength" TextChanged="TextBoxWavelength_TextChanged" KeyDown="TextBox_KeyDown"
-                                         Background="{Binding TextBoxWavelengthValidationColor}"/>
+                            <TextBox Grid.Row="0" Grid.Column="2" Margin="2" IsEnabled="False" x:Name="textBoxWavelength" TextChanged="TextBoxWavelength_TextChanged"
+                                         Background="{Binding TextBoxWavelengthValidationColor}" KeyDown="TextBoxWavelength_KeyDown"/>
                             <TextBox Grid.Row="1" Grid.Column="2" Margin="2" IsEnabled="False" x:Name="textBoxWavenumber" TextChanged="TextBoxWavenumber_TextChanged"/>
                             <TextBox Grid.Row="2" Grid.Column="2" Margin="2" IsEnabled="False" x:Name="textBoxFrequency" TextChanged="TextBoxFrequency_TextChanged"/>
-                            <TextBox Grid.Row="3" Grid.Column="2" Margin="2" IsEnabled="False" x:Name="textBoxAttenuation" TextChanged="TextBoxAttenuation_TextChanged"/>
+                            <TextBox Grid.Row="3" Grid.Column="2" Margin="2" IsEnabled="False" x:Name="textBoxAttenuation" TextChanged="TextBoxAttenuation_TextChanged"
+                                     KeyDown="TextBoxAttenuation_KeyDown"/>
                         </Grid>
 
                     </StackPanel>
                 </Border>
 
-                <Border MinWidth="250" Padding="2" BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2">
+                <Border MinWidth="300" Padding="2" BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2">
                     <StackPanel Margin="2">
                         <TextBlock Text="Спектрометр" Margin="2"/>
-                        <UniformGrid Rows="1" Columns="2">
+                        <UniformGrid Rows="1" Columns="3">
                             <Button Content="Подкл." Margin="2" x:Name="button_plug" Click="Button_plug_Click"/>
                             <ToggleButton Style="{DynamicResource PlayPause}" Margin="2" x:Name="button_acc" 
                                           Click="Button_acc_Click" 
                                           Checked="Button_acc_Checked"/>
+                            <Button Margin="2" Content="Конфиг" Name="ReloadConfig" Click="ReloadConfig_Click"/>
                         </UniformGrid>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -100,13 +102,14 @@
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Экспозиция" Margin="1"/>
                             <TextBox Grid.Row="0" Grid.Column="1" Margin="1" x:Name="tb_exposure"/>
 
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Число пикселей" Margin="1"/>
-                            <TextBox Grid.Row="0" Grid.Column="3" Margin="1" IsReadOnly="True"
+                            <TextBlock Visibility="Collapsed" Grid.Row="0" Grid.Column="2" Text="Число пикселей" Margin="1"/>
+                            <TextBox Visibility="Collapsed" Grid.Row="0" Grid.Column="3" Margin="1" IsReadOnly="True"
                                      Name="numOfPixels"/>
                         </Grid>
-
-                        <TextBlock Text="Диапазон работы прибора:"/>
-                        <UniformGrid Columns="2">
+                        <Button Content="Применить" Margin="2" x:Name="button_apply" Click="Button_apply_click"/>
+                        
+                        <TextBlock IsEnabled="False" Text="Диапазон работы прибора:" Opacity="0.5"/>
+                        <UniformGrid Columns="2" IsEnabled="False" Opacity="0.5">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="λ нач. (нм):" Margin="2" VerticalAlignment="Center"/>
                                 <TextBox MinWidth="50" Margin="2" Name="TextBox_StartAvestaWL"/>
@@ -116,7 +119,7 @@
                                 <TextBox MinWidth="50" Margin="2" Name="TextBox_EndAvestaWL"/>
                             </StackPanel>
                         </UniformGrid>
-                        <Button Content="Применить" Margin="2" x:Name="button_apply" Click="Button_apply_click"/>
+                        
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -133,8 +136,8 @@
                                     Click="Button_CaptureWidespec_Click"/>
 
                             <UniformGrid Columns="2">
-                                <Button Content="Сохранить" Margin="3"/>
-                                <Button Content="Загрузить" Margin="3"/>
+                                <Button Content="Сохранить" Margin="3" Name="ButtonSaveWideSpec" Click="ButtonSaveWideSpec_Click"/>
+                                <Button Content="Загрузить" Margin="3" Name="ButtonLoadWideSpec" Click="ButtonLoadWideSpec_Click"/>
                             </UniformGrid>
 
                             <StackPanel Orientation="Horizontal" Margin="3 1 3 0">
@@ -157,7 +160,7 @@
                                 <TextBlock Text="Статус: " Margin="4 0 2 0" Grid.Column="0" VerticalAlignment="Center"/>
                                 <TextBlock Text="" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
                                            Name="TextBlock_StatusWidespec"/>
-                                <ProgressBar Value="60" Grid.Column="2" Margin="6 0 3 0" Visibility="Collapsed"/>
+                                <ProgressBar Value="60" Grid.Column="2" Name="Progress_wide" Margin="6 0 3 0" Visibility="Collapsed"/>
                             </Grid>
                         </StackPanel>
                     </Expander>
@@ -212,7 +215,7 @@
                                     Click="Button_CaptureMaximumCurve_Click"
                                     />
                             <UniformGrid Columns="2">
-                                <Button Content="Сохранить" Margin="3"/>
+                                <Button Content="Сохранить" Margin="3" Name="Button_SaveCurveMaxes" Click="Button_SaveCurveMaxes_Click"/>
                                 <Button Content="Загрузить" Margin="3"/>
                             </UniformGrid>
                             <StackPanel Orientation="Horizontal">
@@ -310,7 +313,7 @@
                                     <TextBlock Text="" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
                                            Name="textBlock_Status_I_K"/>
                                 </StackPanel>
-                                <ProgressBar Name="Progress_I_K" Height="15" Visibility="Collapsed" Margin="2" Maximum="100"/>
+                                <ProgressBar Name="Progress_I_K" Height="15" Visibility="Collapsed" Margin="2" Minimum="0" Maximum="100"/>
                             </StackPanel>
                         </StackPanel>
                     </Expander>
