@@ -5,7 +5,8 @@
     B0="1.13895762931882E+3"
     B1="-2.64634383386945E-1"
     B2="-6.0410488905703E-7"
-    AproxType="Parabola2">
+    AproxType="Parabola2"
+    SensivityFile="Sensivity.txt">
   </Avesta>
 </configurations>
 

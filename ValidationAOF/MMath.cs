@@ -62,6 +62,31 @@ namespace IvanMath
 
             return Interp(x, list[i1], list[i2]);
         }
+
+        public static List<DataPoint> Divide(List<DataPoint> numerator, List<DataPoint> denumerator)
+        {
+            List<DataPoint> result = new List<DataPoint>();
+            List<double> points = new List<double>();
+
+            for(int i = 0; i < numerator.Count; i++)
+            {
+                points.Add(numerator[i].X);
+            }
+            for (int i = 0; i < denumerator.Count; i++)
+            {
+                if(!points.Contains(denumerator[i].X))
+                    points.Add(denumerator[i].X);
+
+            }
+            points.Sort();
+            
+            for(int i = 0; i < points.Count; i++)
+            {
+                result.Add(new DataPoint(points[i], Interp(points[i], numerator)/Interp(points[i], denumerator)));
+            }
+            
+            return result;
+        }
     }
 
     public class Aprox
