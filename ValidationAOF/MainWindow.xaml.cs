@@ -122,9 +122,8 @@ namespace ValidationAOF
                     dt = DateTime.Now;
                     if (avesta != null)
                     {
-                        //int[] data = avesta.GetData();
-
                         CaptureAveragedSpectralCurve(countAvrgLive, out double[] avrData);
+                        //int[] avrData = avesta.GetData();
 
                         List<DataPoint> points = new List<DataPoint>();
                         for(int i = 0; i < avrData.Length; i++)
@@ -133,7 +132,8 @@ namespace ValidationAOF
                         }
                         points.Sort(PointComparer);
 
-                        CurveLive = points;
+                        CurveLive.Clear();
+                        CurveLive.AddRange(points);
 
                         backgroundWorkerLivespectr.ReportProgress(0);
                     }
@@ -155,6 +155,7 @@ namespace ValidationAOF
 
         private void BackgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
         {
+            (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.Clear();
             (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.AddRange(CurveLive);
             chart.ActualModel.InvalidatePlot(true);
         }
@@ -198,7 +199,7 @@ namespace ValidationAOF
                 }
                 else
                 {
-                    avesta = Avesta.ConnectToFitstDevice();
+                    avesta = Avesta.Connect(0);
                     if(avesta != null)
                     {
                         try
@@ -499,6 +500,7 @@ namespace ValidationAOF
 
                     sliderAttenuation.ValueChanged -= SliderAttenuation_ValueChanged;
                     sliderAttenuation.Value = attenuation;
+                    textBoxAttenuation.Text = attenuation.ToString("F2", CultureInfo.InvariantCulture);
                     sliderAttenuation.ValueChanged += SliderAttenuation_ValueChanged;
                 }
                 else
@@ -655,6 +657,8 @@ namespace ValidationAOF
                 backWorkerCalibrateAtten.ProgressChanged += BackWorkerCalibrateAtten_ProgressChanged;
                 backWorkerCalibrateAtten.RunWorkerCompleted += BackWorkerCalibrateAtten_RunWorkerCompleted;
                 backWorkerCalibrateAtten.RunWorkerAsync(dataToCapture);
+
+                
             }
             catch(Exception ex)
             {
@@ -712,11 +716,11 @@ namespace ValidationAOF
 
                 if(data[max_ind] > target)
                 {
-                    att_l = att_mid;
+                    att_r = att_mid;
                 }
                 else
                 {
-                    att_r = att_mid;
+                    att_l = att_mid;
                 }
 
                 n++;
@@ -841,6 +845,8 @@ namespace ValidationAOF
                 return;
             }
 
+            dataToCapture.autoAttenuation = CheckBox_AutoAttenMaxesCurve.IsChecked == true && CurveAttenuation.Count > 1;
+
             if(backgroundWorkerLivespectr.IsBusy)
             {
                 MessageBox.Show("Остановите захват кривой");
@@ -902,10 +908,30 @@ namespace ValidationAOF
                 while (actual_WL <= dataToCapture.endCap)
                 {
                     // 1) - set wavelength
-                    float wl = (float)actual_WL;
-                    if (wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max)
+                    float hz = AOFilter.Get_HZ_via_WL( (float)actual_WL );
+                    if (hz >= AOFilter.HZ_Min && hz <= AOFilter.HZ_Max)
                     {
-                        AOFilter.Set_Wl(wl);
+                        if(AOFilter.FilterType == FilterTypes.STC_Filter)
+                        {
+                            if(dataToCapture.autoAttenuation && CurveAttenuation.Count > 0)
+                            {
+                                float K = (float) MMath.Interp(actual_WL, CurveAttenuation);
+                                if (K >= 1700 && K <= 2500)
+                                {
+                                    (AOFilter as STC_Filter).Set_Hz(hz, K);
+                                }
+                                else
+                                    break;
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            AOFilter.Set_Hz(hz);
+                        }
                     }
                     else
                         break;
@@ -922,7 +948,7 @@ namespace ValidationAOF
                     double value = 1;
                     for(int i = 0; i < avrData.Length; i++)
                     {
-                        value = avrData[i] / avesta.Sensitivitys[i];
+                        value = avrData[i];
                         if (i == 0)
                         {
                             minValue = value;
@@ -941,20 +967,39 @@ namespace ValidationAOF
                         }
                     }
 
-                    // 5) Добавить точку в список
+                    // 5) Добавить точку в список. Если в списке уже имеется точка с такой длиной волны, то усредняем
                     double real_WL = avesta.Index2Wavelength(maxIndex); //длина волны, на которой получился максимум в реальности
 
-                    CurveSpecMaxesPx.Add(new DataPoint(maxIndex, maxValue));
-                    CurveSpecMaxes.Add(new DataPoint(real_WL, maxValue));
-                    CurveDeviationWL.Add(new DataPoint(actual_WL, real_WL - actual_WL));
+                    bool flag = false; //Найдена точка с равным X
 
-                    CurveSpecMaxesPx.Sort(PointComparer);
-                    CurveSpecMaxes.Sort(PointComparer);
-                    CurveDeviationWL.Sort(PointComparer);
+                    for (int i = 0; i < CurveSpecMaxes.Count; i++)
+                    {
+                        if(CurveSpecMaxes[i].X == real_WL)
+                        {
+                            maxValue = (CurveSpecMaxes[i].Y + maxValue)/2d;
+                            CurveSpecMaxes[i] = new DataPoint( real_WL, maxValue);
+                            CurveSpecMaxesPx[i] = new DataPoint(maxIndex, maxValue);
+                            CurveDeviationWL[i] = new DataPoint(actual_WL, real_WL - actual_WL);
+
+                            flag = true;
+                            break;
+                        }
+                    }
+
+                    if(!flag) //Точка с равным X не найдена. Значит добавим её как новую
+                    {
+                        CurveSpecMaxesPx.Add(new DataPoint(maxIndex, maxValue));
+                        CurveSpecMaxes.Add(new DataPoint(real_WL, maxValue));
+                        CurveDeviationWL.Add(new DataPoint(actual_WL, real_WL - actual_WL));
+                    }
 
                     actual_WL += dataToCapture.stepCap;
                     backWorkerCapCurve.ReportProgress(Convert.ToInt32(100*(actual_WL-dataToCapture.startCap)/(dataToCapture.endCap-dataToCapture.startCap)));
                 }
+
+                CurveSpecMaxesPx.Sort(PointComparer);
+                CurveSpecMaxes.Sort(PointComparer);
+                CurveDeviationWL.Sort(PointComparer);
 
                 e.Result = CurveSpecMaxes;
             }
@@ -980,6 +1025,7 @@ namespace ValidationAOF
             public double accuracy;
             public int N;
             public double transmission;
+            public bool autoAttenuation;
         }
 
         private void Button_CaptureWidespec_Click(object sender, RoutedEventArgs e)
@@ -1445,8 +1491,8 @@ namespace ValidationAOF
             {
                 if(LoadCurveFromFile(CurveSpecWide, true))
                 {
-                    (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.Clear();
-                    (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.AddRange(CurveSpecWide);
+                    (chart.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Clear();
+                    (chart.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.AddRange(CurveSpecWide);
                     chart.ActualModel.InvalidatePlot(true);
 
                     TextBlock_StatusWidespec.Text = "Загружено " + CurveSpecWide.Count.ToString() + " точек";

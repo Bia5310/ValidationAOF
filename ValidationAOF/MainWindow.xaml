@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         Background="WhiteSmoke"
         Loaded="Window_Loaded"
-        Title="MainWindow" Height="800" Width="960">
+        Title="MainWindow" Height="800" Width="1100">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -70,7 +70,7 @@
                             <Slider Grid.Row="1" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderWavenumber" ValueChanged="SliderWavenumber_ValueChanged"/>
                             <Slider Grid.Row="2" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderFrequency" ValueChanged="SliderFrequency_ValueChanged"/>
                             <Slider Grid.Row="3" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderAttenuation" ValueChanged="SliderAttenuation_ValueChanged"
-                                    Maximum="2500" Minimum="1700" Value="1700"/>
+                                    Maximum="2500" Minimum="1700" Value="2500"/>
                             <TextBlock Text="λ, нм:" Grid.Row="0" Grid.Column="0" Margin="2"/>
                             <TextBlock Text="1/λ , см⁻¹:" Grid.Row="1" Grid.Column="0" Margin="2"/>
                             <TextBlock Text="f, Hz:" Grid.Row="2" Grid.Column="0" Margin="2"/>
@@ -82,7 +82,7 @@
                             <TextBox Grid.Row="2" Grid.Column="2" Margin="2" IsEnabled="False" x:Name="textBoxFrequency" TextChanged="TextBoxFrequency_TextChanged"
                                      KeyDown="textBoxFrequency_KeyDown"/>
                             <TextBox Grid.Row="3" Grid.Column="2" Margin="2" IsEnabled="False" x:Name="textBoxAttenuation" TextChanged="TextBoxAttenuation_TextChanged"
-                                     KeyDown="TextBoxAttenuation_KeyDown"/>
+                                     KeyDown="TextBoxAttenuation_KeyDown" Text="2500"/>
                             <StackPanel Grid.Row="4" Grid.ColumnSpan="3" HorizontalAlignment="Stretch">
                                 <CheckBox Content="Автоослабление" Name="AutoAtten" Margin="2" Click="AutoAtten_Click" IsEnabled="False"/>
                             </StackPanel>
@@ -238,9 +238,12 @@
                                 <TextBlock Text="кривой(-ым)" VerticalAlignment="Center"/>
                             </StackPanel>
 
+                            <StackPanel>
+                                <CheckBox Content="Автоослабление" Name="CheckBox_AutoAttenMaxesCurve" Margin="2"/>
+                            </StackPanel>
+                            
                             <Button Content="Захватить" Margin="3" Name="Button_CaptureMaximumCurve"
-                                    Click="Button_CaptureMaximumCurve_Click"
-                                    />
+                                    Click="Button_CaptureMaximumCurve_Click"/>
                             <UniformGrid Columns="2">
                                 <Button Content="Сохранить" Margin="3" Name="Button_SaveCurveMaxes" Click="Button_SaveCurveMaxes_Click"/>
                                 <Button Content="Загрузить" Margin="3" Name="Button_LoadCurveMaxes" Click="Button_LoadCurveMaxes_Click"/>
@@ -305,7 +308,6 @@
                                 <StackPanel Orientation="Horizontal" Margin="2">
                                     <TextBlock Text="Миним. шаг по ослаблению: "/>
                                     <TextBox MinWidth="50" Margin="2 0 2 0" x:Name="textBoxCalibrAccuracy" Text="10"/>
-                                    <TextBlock Text="нм"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="2">
                                     <TextBlock Text="Оптимальное пропускание: "/>

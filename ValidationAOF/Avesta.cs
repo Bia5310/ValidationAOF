@@ -44,16 +44,24 @@ namespace Spectrometer
 
         public Timer timer = new Timer();
 
-        public Avesta(int id)
+        private Avesta(int id)
         {
-            this.id = id;
-            Index2WavelengthAprox.B0 = 222;
+            int _id = id;
+            bool connected = CCD_Init(IntPtr.Zero, "", ref _id);
+            if (connected)
+            {
+                bool res = CCD_GetParameters(id, ref parameters);
+                res = CCD_GetExtendParameters(id, ref extendedParameters);
+            }
+            else
+            {
+                throw new Exception("No connected devices");
+            }
         }
 
-        public static Avesta ConnectToFitstDevice()
+        public static Avesta Connect(int deviceID)
         {
-            Avesta av = new Avesta(0);
-            av.Connect();
+            Avesta av = new Avesta(deviceID);
             return av;
         }
 
@@ -82,27 +90,12 @@ namespace Spectrometer
             return data;
         }
 
-        public double PixelIndexToWavelength(int i)
-        {
-            return 1;
-        }
-
         public void Connect()
         {
-            int _id = 0;
-            bool connected = CCD_Init(IntPtr.Zero, "", ref _id);
-            if (connected)
-            {
-                bool res = CCD_GetParameters(id, ref parameters);
-                res = CCD_GetExtendParameters(id, ref extendedParameters);
-            }
-            else
-            {
-                throw new Exception("No connected devices");
-            }
+
         }
 
-        public List<int> FindConnectedDevicesIDs()
+        public static List<int> EnumerateAvestaDevicesIDs()
         {
             List<int> devices = new List<int>();
             if (CCD_HitTest(0))
