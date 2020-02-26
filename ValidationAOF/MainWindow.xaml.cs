@@ -1544,8 +1544,8 @@ namespace ValidationAOF
             {
                 if(LoadCurveFromFile(CurveSpecMaxes, true))
                 {
-                    (chart.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Clear();
-                    (chart.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.AddRange(CurveSpecMaxes);
+                    (chart.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.Clear();
+                    (chart.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.AddRange(CurveSpecMaxes);
                     chart.ActualModel.InvalidatePlot(true);
 
                     TextBlock_StatusMaximumCurve.Text = "Загружено " + CurveSpecMaxes.Count.ToString() + " точек";
