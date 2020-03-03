@@ -12,12 +12,33 @@ namespace Spectrometer
     {
         private static NETWrapper wrapper = null;
         private double[] wavelengthes = null;
+        private static int devicesCreated = 0;
+
+        static OceanOptics()
+        {
+            wrapper = new NETWrapper();
+        }
 
         public OceanOptics(int deviceId)
         {
             id = deviceId;
-            wrapper = new NETWrapper();
             wavelengthes = wrapper.getWavelengths(id);
+
+            devicesCreated++;
+
+            if (devicesCreated == 1)
+                wrapper.openAllSpectrometers();
+        }
+
+        ~OceanOptics()
+        {
+            devicesCreated--;
+            try
+            {
+                wrapper.closeAllSpectrometers();
+            }
+            catch (Exception) { }
+            
         }
 
         public override SpectrometerType Type => SpectrometerType.OceanOptics;
@@ -41,17 +62,22 @@ namespace Spectrometer
             return dataPoints;
         }
 
-        public override void SetAveragesNumber(int averagesNumber)
+        public override int AveragesCount
         {
-            if (averagesNumber <= 0)
-                throw new Exception("Число усреднений должно быть больше 0");
+            get => wrapper.getScansToAverage(id);
+            set
+            {
+                if (value <= 0)
+                    throw new Exception("Число усреднений должно быть больше 0");
 
-            wrapper.setScansToAverage(id, averagesNumber);
+                wrapper.setScansToAverage(id, value);
+            }
         }
 
         public static List<int> EnumerateOceanOpticsDeviceIDs()
         {
             List<int> devices = new List<int>();
+            
             wrapper.openAllSpectrometers();
             int n = wrapper.getNumberOfSpectrometersFound();
             for (int i = 0; i < n; i++)

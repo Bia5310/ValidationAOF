@@ -13,16 +13,15 @@ using static Spectrometer.UsbCCD;
 
 namespace Spectrometer
 {
-    public class Avesta
+    public class Avesta : Spectrometer
     {
         private TCCDUSBParams parameters = new TCCDUSBParams();
         private TCCDUSBExtendParams extendedParameters = new TCCDUSBExtendParams();
 
-        public double wavelength_start = 0;
-        public double wavelength_end = 0;
-
         public string configFile = "";
         public string sensivityFile = "";
+
+        private int averagesCount = 1;
 
         public List<DataPoint> sensititvityList = new List<DataPoint>(); // массив чувствительности
 
@@ -43,6 +42,8 @@ namespace Spectrometer
         }
 
         public Timer timer = new Timer();
+
+        public override SpectrometerType Type => SpectrometerType.Avesta;
 
         private Avesta(int id)
         {
@@ -65,7 +66,7 @@ namespace Spectrometer
             return av;
         }
 
-        public int[] GetData(bool correctSensetivity = true)
+        private int[] GetData(bool correctSensetivity = true)
         {
             int pixels = extendedParameters.nNumPixelsH * 1;//ExtendParams.nNumPixelsH * ExtendParams.nNumPixelsV * ExtendParams.nNumReadOuts;
             int cb = pixels * sizeof(uint);
@@ -90,22 +91,84 @@ namespace Spectrometer
             return data;
         }
 
-        public void Connect()
+        public override List<DataPoint> GetSpectrum()
         {
+            int[][] data = new int[averagesCount][];
+            List<DataPoint> spectrum = new List<DataPoint>();
 
+            for (int i = 0; i < averagesCount; i++)
+            {
+                data[i] = GetData(true);
+            }
+
+            double avr = 0;
+
+            if (data.Length > 0)
+            {
+                for (int i = 0; i < data[0].Length; i++)
+                {
+                    for (int j = 0; j < data.Length; j++)
+                    {
+                        avr += data[j][i];
+                    }
+                    spectrum.Add(new DataPoint( Index2Wavelength(i), avr/data.Length) );
+                    avr = 0;
+                }
+            }
+            else
+                throw new Exception("N should be >= 1");
+
+            spectrum.Sort(PointComparer);
+            return spectrum;
         }
 
-        public static List<int> EnumerateAvestaDevicesIDs()
+        public static int PointComparer(DataPoint p1, DataPoint p2)
+        {
+            if (p1.X > p2.X)
+                return 1;
+            if (p1.X < p2.X)
+                return -1;
+            return 0;
+        }
+
+        /*private void CaptureAveragedSpectralCurve(in int N, out double[] avrData, bool correctSensivity = true)
+        {
+            int[][] data = new int[N][];
+
+            for (int i = 0; i < N; i++)
+            {
+                data[i] = GetData(correctSensivity);
+            }
+
+            avrData = new double[data[0].Length];
+
+            if (data.Length > 0)
+            {
+                for (int i = 0; i < data[0].Length; i++)
+                {
+                    for (int j = 0; j < data.Length; j++)
+                    {
+                        avrData[i] += data[j][i];
+                    }
+                    avrData[i] /= data.Length;
+                }
+            }
+            else
+                throw new Exception("N should be >= 1");
+        }*/
+
+        /*public static List<int> EnumerateAvestaDevicesIDs()
         {
             List<int> devices = new List<int>();
-            if (CCD_HitTest(0))
+            bool flag = false;
+            if (flag = CCD_Init(0, null, ))
                 devices.Add(0);
             if (CCD_HitTest(1))
                 devices.Add(1);
             if (CCD_HitTest(2))
                 devices.Add(2);
             return devices;
-        }
+        }*/
 
         public void LoadConfigFromFile(string configPath)
         {
@@ -117,20 +180,20 @@ namespace Spectrometer
             if(avestaXml != null)
             {
                 string attrVal = avestaXml.Attributes["WavelengthStart"]?.Value ?? "190";
-                wavelength_start = double.Parse(attrVal);
+                wavelengthMin = double.Parse(attrVal);
 
                 attrVal = avestaXml.Attributes["WavelengthEnd"]?.Value ?? "1100";
-                wavelength_end = double.Parse(attrVal);
+                wavelengthMax = double.Parse(attrVal);
 
                 attrVal = avestaXml.Attributes["B0"]?.Value;
                 if (attrVal == null)
-                    Index2WavelengthAprox.B0 = wavelength_end;
+                    Index2WavelengthAprox.B0 = wavelengthMax;
                 else
                     Index2WavelengthAprox.B0 = double.Parse(attrVal, NumberStyles.Float, CultureInfo.InvariantCulture);
 
                 attrVal = avestaXml.Attributes["B1"]?.Value;
                 if (attrVal == null)
-                    Index2WavelengthAprox.B1 = (wavelength_start - wavelength_end) / parameters.nNumPixels;
+                    Index2WavelengthAprox.B1 = (wavelengthMin - wavelengthMax) / parameters.nNumPixels;
                 else
                     Index2WavelengthAprox.B1 = double.Parse(attrVal, NumberStyles.Float, CultureInfo.InvariantCulture);
 
@@ -147,7 +210,7 @@ namespace Spectrometer
                 else
                     Index2WavelengthAprox.AproxType = Aprox.AproxTypes.Linear;
 
-                if (wavelength_start >= wavelength_end)
+                if (wavelengthMin >= wavelengthMax)
                     throw new Exception("Некорректно задан спектральный диапазон прибора");
 
                 if (Index2WavelengthAprox.AproxType == Aprox.AproxTypes.Linear)
@@ -204,8 +267,8 @@ namespace Spectrometer
                 catch (Exception ex)
                 {
                     sensititvityList.Clear();
-                    sensititvityList.Add(new DataPoint(wavelength_start, 1));
-                    sensititvityList.Add(new DataPoint(wavelength_end, 1));
+                    sensititvityList.Add(new DataPoint(wavelengthMin, 1));
+                    sensititvityList.Add(new DataPoint(wavelengthMax, 1));
 
                     sensitivitys = new double[parameters.nNumPixels];
                     for (int i = 0; i < parameters.nNumPixels; i++)
@@ -232,6 +295,14 @@ namespace Spectrometer
         {
             get { return sensitivitys; }
             set { sensitivitys = value; }
+        }
+
+        public override double Exposure { get => extendedParameters.sExposureTime;
+            set
+            {
+                CCD_SetParameter(id, UsbCCD.PRM_EXPTIME, (float)value);
+                CCD_GetExtendParameters(id, ref extendedParameters);
+            }
         }
 
         public double SensivityByWavelength(double wavelength)
@@ -268,6 +339,18 @@ namespace Spectrometer
             }
             //default
             return 0;
+        }
+
+        public override int AveragesCount
+        {
+            get => averagesCount;
+            set
+            {
+                if (value <= 0)
+                    throw new Exception("Число усреднений должно быть больше 0");
+
+                averagesCount = value;
+            }
         }
     }
 

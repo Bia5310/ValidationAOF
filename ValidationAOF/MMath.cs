@@ -87,6 +87,24 @@ namespace IvanMath
             
             return result;
         }
+
+        public static int ClampInt(int value, int min, int max)
+        {
+            if (value > max)
+                return max;
+            if (value < min)
+                return min;
+            return value;
+        }
+
+        public static double Clamp(double value, double min, double max)
+        {
+            if (value > max)
+                return max;
+            if (value < min)
+                return min;
+            return value;
+        }
     }
 
     public class Aprox

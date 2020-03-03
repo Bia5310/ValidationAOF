@@ -24,15 +24,17 @@
                 <ColumnDefinition/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-                <RowDefinition/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <oxy:Plot x:Name="chart">
+            <oxy:Plot x:Name="chart" Grid.Row="0">
                 <oxy:Plot.Axes>
                     <oxy:LinearAxis Position="Left" Key="bottom"/>
-                    <oxy:LinearAxis Position="Bottom" Key="left"/>
+                    <oxy:LinearAxis Position="Bottom" Key="left" Name="axisX"/>
                     <oxy:LinearAxis Position="Right" Key="right"/>
                 </oxy:Plot.Axes>
                 <oxy:Plot.Series>
@@ -43,7 +45,23 @@
                 </oxy:Plot.Series>
             </oxy:Plot>
 
-            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal">
+            <GridSplitter Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Stretch" Height="4"
+                          Margin="2" Background="LightGray"/>
+
+            <oxy:Plot x:Name="chartPowers" Grid.Row="2">
+                <oxy:Plot.Axes>
+                    <oxy:LinearAxis Position="Left" Key="bottom" Maximum="{Binding ElementName=axisX, Path=Maximum}"
+                                    Minimum="{Binding ElementName=axisX, Path=Minimum}"/>
+                    <oxy:LinearAxis Position="Bottom" Key="left"/>
+                </oxy:Plot.Axes>
+                <oxy:Plot.Series>
+                    <oxy:LineSeries Color="Blue" StrokeThickness="1"/>
+                    <oxy:LineSeries Color="Red" StrokeThickness="2"/>
+                    <oxy:LineSeries Color="Green" StrokeThickness="1"/>
+                </oxy:Plot.Series>
+            </oxy:Plot>
+
+            <StackPanel Grid.Row="4" Grid.Column="0" Orientation="Horizontal">
                 <Border MinWidth="300" Padding="2" BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2">
                     <StackPanel Margin="2 0 0 0">
                         <TextBlock Text="АОФ" Margin="2"/>
@@ -55,7 +73,7 @@
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition/>
+                                <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="65"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -83,8 +101,15 @@
                                      KeyDown="textBoxFrequency_KeyDown"/>
                             <TextBox Grid.Row="3" Grid.Column="2" Margin="2" IsEnabled="False" x:Name="textBoxAttenuation" TextChanged="TextBoxAttenuation_TextChanged"
                                      KeyDown="TextBoxAttenuation_KeyDown" Text="2500"/>
-                            <StackPanel Grid.Row="4" Grid.ColumnSpan="3" HorizontalAlignment="Stretch">
-                                <CheckBox Content="Автоослабление" Name="AutoAtten" Margin="2" Click="AutoAtten_Click" IsEnabled="False"/>
+                            <StackPanel Grid.Row="4" Grid.ColumnSpan="3" Grid.Column="0" HorizontalAlignment="Stretch" Orientation="Horizontal">
+                                <!--<CheckBox Content="Автоослабление" VerticalAlignment="Center" Name="AutoAtten" Margin="2" Click="AutoAtten_Click" IsEnabled="False"/>-->
+                                <TextBlock Text="Ослабление:" VerticalAlignment="Center" Margin="2"/>
+                                <ComboBox IsEnabled="False" Name="ComboBox_AutoAttenSource" Margin="10 2 2 2" SelectedIndex="0"
+                                          SelectionChanged="ComboBox_AutoAttenSource_SelectionChanged" HorizontalAlignment="Right">
+                                    <ComboBoxItem Content="*.dev файл"/>
+                                    <ComboBoxItem Content="Ползунок"/>
+                                    <ComboBoxItem Content="Загруженная кривая"/>
+                                </ComboBox>
                             </StackPanel>
                         </Grid>
 
@@ -111,7 +136,7 @@
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Экспозиция" Margin="1"/>
-                            <TextBox Grid.Row="0" Grid.Column="1" Margin="1" x:Name="tb_exposure"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Margin="1" x:Name="tb_exposure" KeyDown="Tb_exposure_KeyDown"/>
                             
                             <Button Content="Применить" Grid.Column="3" Grid.Row="0" Margin="2" x:Name="button_apply" Click="Button_apply_click"/>
                             
@@ -130,9 +155,14 @@
 
                         <StackPanel Orientation="Horizontal" Margin="3 1 3 0">
                             <TextBlock Text="Усреднять по" VerticalAlignment="Center"/>
-                            <TextBox MinWidth="50" Margin="4" VerticalContentAlignment="Center" VerticalAlignment="Center" Text="1"
+                            <TextBox MinWidth="50" Margin="4" VerticalContentAlignment="Center" TextAlignment="Center" VerticalAlignment="Center" Text="1"
                                          Name="TextBox_CountAvrgLive" TextChanged="TextBox_CountAvrgLive_TextChanged"/>
                             <TextBlock Text="кривой(-ым)" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <StackPanel>
+                            <Button Content="Info" Width="40" HorizontalAlignment="Left" Margin="2"
+                                    Click="Button_Click_2"/>
                         </StackPanel>
 
                         <TextBlock IsEnabled="False" Text="Диапазон работы прибора:" Opacity="0.5" Visibility="Collapsed"/>
@@ -151,7 +181,7 @@
                 </Border>
             </StackPanel>
 
-            <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Center" Height="4" Margin="2" Background="LightGray"/>
+            <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" VerticalAlignment="Center" Height="4" Margin="2" Background="LightGray"/>
         </Grid>
 
         <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
@@ -167,7 +197,7 @@
                                 <Button Content="Загрузить" Margin="3" Name="ButtonLoadWideSpec" Click="ButtonLoadWideSpec_Click"/>
                             </UniformGrid>
 
-                            <StackPanel Orientation="Horizontal" Margin="3 1 3 0">
+                            <StackPanel Orientation="Horizontal" Margin="3 1 3 0" Visibility="Collapsed">
                                 <TextBlock Text="Усреднять по" VerticalAlignment="Center"/>
                                 <TextBox MinWidth="50" Margin="4" VerticalContentAlignment="Center" VerticalAlignment="Center" Text="5"
                                          Name="TextBox_CountWidespecAvrg"/>
@@ -200,7 +230,7 @@
                 </Path>
 
                 <Border BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2 1 2 0">
-                    <Expander Header="Кривая спектральных максимумов" IsExpanded="True" Margin="2">
+                    <Expander Header="Кривая мощностей S(λ) и пиков" IsExpanded="True" Margin="2">
                         <StackPanel Margin="2">
                             <TextBlock Text="Параметры захвата:" Margin="3"/>
 
@@ -231,17 +261,13 @@
                                 <TextBox x:Name="textBoxStep" Grid.Row="1" Grid.Column="2" Text="" Margin="2"/>
                             </Grid>
 
-                            <StackPanel Orientation="Horizontal" Margin="3 1 3 0">
+                            <StackPanel Orientation="Horizontal" Margin="3 1 3 0" Visibility="Collapsed">
                                 <TextBlock Text="Усреднять по" VerticalAlignment="Center"/>
                                 <TextBox MinWidth="50" Margin="4" VerticalContentAlignment="Center" VerticalAlignment="Center" Text="5"
                                          Name="TextBox_CountMaxCurvesAvrg"/>
                                 <TextBlock Text="кривой(-ым)" VerticalAlignment="Center"/>
                             </StackPanel>
 
-                            <StackPanel>
-                                <CheckBox Content="Автоослабление" Name="CheckBox_AutoAttenMaxesCurve" Margin="2"/>
-                            </StackPanel>
-                            
                             <Button Content="Захватить" Margin="3" Name="Button_CaptureMaximumCurve"
                                     Click="Button_CaptureMaximumCurve_Click"/>
                             <UniformGrid Columns="2">
@@ -310,13 +336,17 @@
                                     <TextBox MinWidth="50" Margin="2 0 2 0" x:Name="textBoxCalibrAccuracy" Text="10"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="2">
+                                    <TextBlock Text="Минимальная мощность: "/>
+                                    <TextBox MinWidth="50" Margin="2 0 2 0" x:Name="textBoxMinPower"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="2" Visibility="Collapsed">
                                     <TextBlock Text="Оптимальное пропускание: "/>
                                     <TextBox MinWidth="50" Margin="2 0 2 0" x:Name="textBoxCalibrOptimalTrans"/>
                                 </StackPanel>
 
                             </StackPanel>
                             
-                            <Button Content="Подбор ослабления" Margin="3" Name="Button_CalculateAtten"
+                            <Button Content="Калибровка" Margin="3" Name="Button_CalculateAtten"
                                     Click="Button_CalculateAtten_Click"/>
 
                             <UniformGrid Columns="3">
@@ -325,6 +355,9 @@
                                 <Button Content="График" Margin="3" IsEnabled="False"/>
                             </UniformGrid>
 
+                            <Button Content="Создать *.dev файл" Margin="3" Name="Button_MakeDevFile"
+                                    Click="Button_MakeDevFile_Click" Visibility="Collapsed"/>
+
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Статус: " Margin="4 0 2 0" Grid.Column="0" VerticalAlignment="Center"/>
                                 <TextBlock Text="" VerticalAlignment="Center" Grid.Column="1" Margin="3 0 10 0"
@@ -332,7 +365,7 @@
                             </StackPanel>
                             <ProgressBar Name="Progress_calibrAtten" Height="15" Visibility="Collapsed" Margin="2" Minimum="0" Maximum="100"/>
                             <StackPanel>
-                                <TextBlock Text="Зависимость сигнала I от ослабления К" Margin="2"/>
+                                <TextBlock Text="Зависимость площади S от ослабления К" Margin="2"/>
                                 <Grid Margin="2">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition/>

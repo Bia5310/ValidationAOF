@@ -35,8 +35,7 @@ namespace ValidationAOF
     /// </summary>
     public partial class MainWindow : Window
     {
-
-        public Avesta avesta = null;
+        public Spectrometer.Spectrometer spectrometer = null;
         private BackgroundWorker backgroundWorkerLivespectr = new BackgroundWorker();
         private bool stopCapture = false;
 
@@ -54,7 +53,9 @@ namespace ValidationAOF
         List<DataPoint> CurveDeviationWL = new List<DataPoint>();
         List<DataPoint> CurveTransmission = new List<DataPoint>();
         List<DataPoint> CurveIntensityFromAtten = new List<DataPoint>(); //actual_WL, real_WL - actual_WL
-        List<DataPoint> CurveAttenuation = new List<DataPoint>();
+        List<DataPoint> CurveAttenuation = new List<DataPoint>(); //HZ, K
+        List<DataPoint> CurveSqrOnWavelength = new List<DataPoint>();
+        List<DataPoint> CurveSqrFromAtten = new List<DataPoint>();
 
         public MainWindow()
         {
@@ -64,48 +65,10 @@ namespace ValidationAOF
             backgroundWorkerLivespectr.WorkerReportsProgress = true;
             backgroundWorkerLivespectr.WorkerSupportsCancellation = true;
 
-            sliderWavelength.Tag = textBoxWavelength;
-            sliderFrequency.Tag = textBoxFrequency;
-            sliderWavenumber.Tag = textBoxWavenumber;
-            sliderAttenuation.Tag = textBoxAttenuation;
-
             worker_sequenceMax = new BackgroundWorker();
             worker_sequenceMax.WorkerReportsProgress = true;
             worker_sequenceMax.WorkerSupportsCancellation = true;
             worker_sequenceMax.DoWork += Worker_sequenceMax_DoWork;
-
-            //MessageBox.Show(new Win32Exception().Message);
-            //InitCCDUSB();
-        }
-
-        [HandleProcessCorruptedStateExceptions]
-        private void InitCCDUSB()
-        {
-            int id = 0;
-            string str = "";
-            bool inited = UsbCCD.CCD_Init(new WindowInteropHelper(this).Handle, str, ref id);
-            //Get serium
-            //string serium = "";
-            //inited = UsbCCD.CCD_GetSerialNum(0, ref serium);
-            
-            //MessageBox.Show(serium.ToString());
-            //listBox1.Items.Add("Serium number: " + serium);
-            //listBox1.Items.Add("SensorName: " + UsbCCD.CCD_GetSensorName(0));
-            //Get ID
-            //inited = UsbCCD.CCD_GetID(serium, ref ID);
-            //listBox1.Items.Add("ID: " + ID.ToString());
-            //Fill params
-            //ExtendParams = new UsbCCD.TCCDUSBExtendParams();
-            //inited = UsbCCD.CCD_GetExtendParameters(0, ref ExtendParams);
-            //Params = new UsbCCD.TCCDUSBParams();
-            //inited = UsbCCD.CCD_GetParameters(0, ref Params);
-            /*
-            uint status = 0;
-            UsbCCD.CCD_GetMeasureStatus(0, ref status);
-            listBox1.Items.Add(status.ToString());
-            */
-            if (!inited)
-                MessageBox.Show("InitError");
         }
 
         List<DataPoint> CurveLive = new List<DataPoint>();
@@ -120,20 +83,21 @@ namespace ValidationAOF
                 while (!stopCapture)
                 {
                     dt = DateTime.Now;
-                    if (avesta != null)
+                    if (spectrometer != null)
                     {
-                        CaptureAveragedSpectralCurve(countAvrgLive, out double[] avrData);
+                        List<DataPoint> spectrum = spectrometer.GetSpectrum();
+                        //CaptureAveragedSpectralCurve(countAvrgLive, out double[] avrData);
                         //int[] avrData = avesta.GetData();
 
-                        List<DataPoint> points = new List<DataPoint>();
-                        for(int i = 0; i < avrData.Length; i++)
+                        //List<DataPoint> points = new List<DataPoint>();
+                        /*for(int i = 0; i < avrData.Length; i++)
                         {
                             points.Add(new DataPoint(avesta.Index2Wavelength(i), avrData[i]));
-                        }
-                        points.Sort(PointComparer);
+                        }*/
+                        //spectrum.Sort(PointComparer);
 
                         CurveLive.Clear();
-                        CurveLive.AddRange(points);
+                        CurveLive.AddRange(spectrum);
 
                         backgroundWorkerLivespectr.ReportProgress(0);
                     }
@@ -157,7 +121,30 @@ namespace ValidationAOF
         {
             (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.Clear();
             (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.AddRange(CurveLive);
+
+            double power = IntegrateCurve(CurveLive);
+            (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Clear();
+            (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(sliderWavelength.Value, 0));
+            (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(sliderWavelength.Value, power));
+
             chart.ActualModel.InvalidatePlot(true);
+            chartPowers.ActualModel.InvalidatePlot(true);
+        }
+
+        private double IntegrateCurve(List<DataPoint> curve)
+        {
+            double integral = 0;
+            double dl = 0;
+
+            for(int i = 0; i < curve.Count; i++)
+            {
+                if (i < curve.Count - 1)
+                    dl = curve[i + 1].X - curve[i].X;
+
+                integral += curve[i].Y * dl;
+            }
+
+            return integral;
         }
 
         private void Worker_sequenceMax_DoWork(object sender, DoWorkEventArgs e)
@@ -193,18 +180,19 @@ namespace ValidationAOF
         {
             try
             {
-                if (avesta != null) //если подключено, то отключить
+                if (spectrometer != null) //если подключено, то отключить
                 {
-                    avesta = null;
+                    spectrometer = null;
                 }
                 else
                 {
-                    avesta = Avesta.Connect(0);
-                    if(avesta != null)
+                    spectrometer = Spectrometer.Spectrometer.ConnectToFirstDevice();//Avesta.Connect(0);
+                    if(spectrometer != null)
                     {
                         try
                         {
-                            avesta.LoadConfigFromFile("ConfigFile.xml");
+                            if(spectrometer.Type == Spectrometer.Spectrometer.SpectrometerType.Avesta)
+                                (spectrometer as Avesta).LoadConfigFromFile("ConfigFile.xml");
                         }
                         catch (Exception ex)
                         {
@@ -213,7 +201,7 @@ namespace ValidationAOF
                     }
                     //string sensorName = UsbCCD.CCD_GetSensorName(0);
                     //MessageBox.Show(sensorName);
-                    tb_exposure.Text = avesta.ExtendParameters.sExposureTime.ToString(CultureInfo.InvariantCulture);
+                    tb_exposure.Text = spectrometer.Exposure.ToString("F3", CultureInfo.InvariantCulture);//ExtendParameters.sExposureTime.ToString(CultureInfo.InvariantCulture);
                 }
             }
             catch (Exception exc)
@@ -226,7 +214,7 @@ namespace ValidationAOF
         {
             ToggleButton tgb = sender as ToggleButton;
 
-            if (avesta == null)
+            if (spectrometer == null)
             {
                 tgb.IsChecked = false;
                 return;
@@ -253,16 +241,19 @@ namespace ValidationAOF
 
         private void Button_apply_click(object sender, RoutedEventArgs e)
         {
-            if(avesta == null)
+            if(spectrometer == null)
             {
                 MessageBox.Show("Спектрометр не подключен");
                 return;
             }
 
+            
+            
             float exptime = 0;
             if (float.TryParse(tb_exposure.Text, out exptime))
             {
-                UsbCCD.CCD_SetParameter(avesta.ID, UsbCCD.PRM_EXPTIME, exptime);
+                spectrometer.Exposure = exptime;
+                //UsbCCD.CCD_SetParameter(spectrometer.ID, UsbCCD.PRM_EXPTIME, exptime);
             }
             /*
             //запомним диапазон работы прибора по длинам волн
@@ -340,7 +331,7 @@ namespace ValidationAOF
 
             sliderWavelength.Value = (AOFilter.WL_Max + AOFilter.WL_Min) / 2;
             //textBoxWavelength.Text = sliderWavelength.Value.ToString("F2", CultureInfo.InvariantCulture);
-            AutoAtten.IsEnabled = AOFilter.FilterType == FilterTypes.STC_Filter;
+            ComboBox_AutoAttenSource.IsEnabled = AOFilter.FilterType == FilterTypes.STC_Filter;
         }
 
         private void ButtonConnectAOF_Click(object sender, RoutedEventArgs e)
@@ -385,10 +376,11 @@ namespace ValidationAOF
             textBoxFrequency.IsEnabled = loaded;
             textBoxWavelength.IsEnabled = loaded;
             textBoxWavenumber.IsEnabled = loaded;
-            AutoAtten.IsEnabled = loaded && (AOFilter.FilterType == FilterTypes.STC_Filter);
 
-            sliderAttenuation.IsEnabled = attenuationAvailable;
-            textBoxAttenuation.IsEnabled = attenuationAvailable;
+            sliderAttenuation.IsEnabled = attenuationAvailable && loaded;
+            textBoxAttenuation.IsEnabled = attenuationAvailable && loaded;
+            ComboBox_AutoAttenSource.IsEditable = attenuationAvailable && loaded;
+
         }
 
         private void SetRanges()
@@ -481,22 +473,37 @@ namespace ValidationAOF
                 return;
             }
 
-            if (wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max)
+            float hz = AOFilter.Get_HZ_via_WL(wl);
+
+            if (hz >= AOFilter.HZ_Min && hz <= AOFilter.HZ_Max)
             {
                 if (AOFilter.FilterType == FilterTypes.STC_Filter)
                 {
                     float attenuation = 0;
-                    if (AutoAtten.IsChecked == true && CurveAttenuation.Count != 0)
+                    bool useAttenuation = true;
+
+                    if(ComboBox_AutoAttenSource.SelectedIndex == 0)//by DEV
                     {
-                        attenuation = (float)MMath.Interp(wl, CurveAttenuation);
+                        useAttenuation = false;
                     }
-                    else
+                    if (ComboBox_AutoAttenSource.SelectedIndex == 1) //by Slider
                     {
                         attenuation = (float)sliderAttenuation.Value;
                     }
+                    if (ComboBox_AutoAttenSource.SelectedIndex == 2)//by CurveAtten
+                    {
+                        if (CurveAttenuation.Count != 0)
+                        {
+                            attenuation = (float)MMath.Interp(hz, CurveAttenuation);
+                        }
+                        else
+                            useAttenuation = false;
+                    }
 
-                    if(attenuation >= 1700 && attenuation <= 2500)
-                        (AOFilter as STC_Filter).Set_Hz(AOFilter.Get_HZ_via_WL(wl), attenuation);
+                    if(attenuation >= 1700 && attenuation <= 2500 && useAttenuation)
+                        (AOFilter as STC_Filter).Set_Hz(hz, attenuation);
+                    else
+                        AOFilter.Set_Hz(hz);
 
                     sliderAttenuation.ValueChanged -= SliderAttenuation_ValueChanged;
                     sliderAttenuation.Value = attenuation;
@@ -505,7 +512,7 @@ namespace ValidationAOF
                 }
                 else
                 {
-                    AOFilter.Set_Wl(wl);
+                    AOFilter.Set_Hz(hz);
                 }
             }
 
@@ -540,12 +547,15 @@ namespace ValidationAOF
             sliderWavelength.ValueChanged -= SliderWavelength_ValueChanged;
             sliderFrequency.ValueChanged -= SliderFrequency_ValueChanged;
             sliderWavenumber.ValueChanged -= SliderWavenumber_ValueChanged;
+            sliderAttenuation.ValueChanged -= SliderAttenuation_ValueChanged;
 
             try
             {
                 sliderWavelength.Value = AOFilter.WL_Current;
                 sliderFrequency.Value = AOFilter.HZ_Current;
                 sliderWavenumber.Value = 1e7d / sliderWavelength.Value;
+                /*if (AOFilter.FilterType == FilterTypes.STC_Filter)
+                    sliderAttenuation.Value = (AOFilter as STC_Filter) ;*/
             }
             catch (Exception exc)
             {
@@ -557,6 +567,7 @@ namespace ValidationAOF
                 sliderWavelength.ValueChanged += SliderWavelength_ValueChanged;
                 sliderFrequency.ValueChanged += SliderFrequency_ValueChanged;
                 sliderWavenumber.ValueChanged += SliderWavenumber_ValueChanged;
+                sliderAttenuation.ValueChanged += SliderAttenuation_ValueChanged;
             }
         }
 
@@ -608,7 +619,7 @@ namespace ValidationAOF
 
             try
             {
-                if (avesta == null)
+                if (spectrometer == null)
                     throw new Exception("Спектрометр не подключен");
 
                 if (AOFilter == null)
@@ -617,17 +628,17 @@ namespace ValidationAOF
                 if (AOFilter.FilterType != FilterTypes.STC_Filter)
                     throw new Exception("Данный фильтр не поддерживает коэффициент ослабление");
 
-                if (CurveTransmission.Count == 0)
-                    throw new Exception("Отсутствует зависимость коэффициента пропускания");
-                
-                if (CurveSpecWide.Count == 0)
-                    throw new Exception("Отсутствует кривая широкого спектра");
+                //if (CurveTransmission.Count == 0)
+                //    throw new Exception("Отсутствует зависимость коэффициента пропускания");
+                //
+                //if (CurveSpecWide.Count == 0)
+                //    throw new Exception("Отсутствует кривая широкого спектра");
 
                 if (double.TryParse(textBoxStartCalibr.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.startCap) &&
                     double.TryParse(textBoxEndCalibr.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.endCap) &&
                     double.TryParse(textBoxStepCalibr.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.stepCap) &&
                     double.TryParse(textBoxCalibrAccuracy.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.accuracy) &&
-                    double.TryParse(textBoxCalibrOptimalTrans.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.transmission))
+                    double.TryParse(textBoxMinPower.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.optimapSquare))
                 {
                     if (dataToCapture.startCap > dataToCapture.endCap)
                         throw new Exception("Начальная длина волны больше конечной или совпадают");
@@ -641,8 +652,8 @@ namespace ValidationAOF
                     if (dataToCapture.accuracy <= 0)
                         throw new Exception("Шаг по ослаюлению должен быть > 0");
 
-                    if (dataToCapture.transmission <= 0)
-                        throw new Exception("Коэффициент пропускания должен быть больше 0");
+                    if (dataToCapture.optimapSquare <= 0)
+                        throw new Exception("Площадь под графиком должна быть больше 0");
                 }
                 else
                 {
@@ -657,8 +668,6 @@ namespace ValidationAOF
                 backWorkerCalibrateAtten.ProgressChanged += BackWorkerCalibrateAtten_ProgressChanged;
                 backWorkerCalibrateAtten.RunWorkerCompleted += BackWorkerCalibrateAtten_RunWorkerCompleted;
                 backWorkerCalibrateAtten.RunWorkerAsync(dataToCapture);
-
-                
             }
             catch(Exception ex)
             {
@@ -667,31 +676,46 @@ namespace ValidationAOF
             }
         }
 
+        public struct DevPoint
+        {
+            public double Hz;
+            public double Wl;
+            public double K;
+        }
+
+        List<DevPoint> CurvesForDev = new List<DevPoint>();
+
         private void BackWorkerCalibrateAtten_DoWork(object sender, DoWorkEventArgs e)
         {
             DataToCaptureСurves dataToCapture = (DataToCaptureСurves)e.Argument;
 
             CurveAttenuation.Clear();
+            CurvesForDev.Count();
 
             for(double w = dataToCapture.startCap; w <= dataToCapture.endCap; w += dataToCapture.stepCap)
             {
-                double targetIntensity = dataToCapture.transmission * MMath.Interp(w, CurveSpecWide); //оптимальное пропускание * точка на широком спектре
+                //double targetIntensity = dataToCapture.transmission * MMath.Interp(w, CurveSpecWide); //оптимальное пропускание * точка на широком спектре
 
-                CalibrationOnWavelength(w, dataToCapture.accuracy, targetIntensity, out double attenuation);
-                CurveAttenuation.Add(new DataPoint(w, attenuation));
+                CalibrationOnWavelength(w, dataToCapture.accuracy, dataToCapture.optimapSquare, out double attenuation, out double hz, out double real_wl);
+
+                CurveAttenuation.Add(new DataPoint(hz, attenuation));
+                CurvesForDev.Add(new DevPoint() { Hz = hz, Wl = real_wl, K = attenuation });
 
                 backWorkerCalibrateAtten.ReportProgress(Convert.ToInt32( 100d*(w - dataToCapture.startCap)/(dataToCapture.endCap - dataToCapture.startCap) ));
             }
 
             CurveAttenuation.Sort(PointComparer);
+            CurvesForDev.Sort(DevPointComparer);
         }
 
-        private void CalibrationOnWavelength(double wavelength, double accuracy, double target, out double attenuation)
+        private void CalibrationOnWavelength(double wavelength, double accuracy, double target, out double attenuation, out double hz, out double real_wl)
         {
             double att_l = 1700;
             double att_r = 2500;
             double att_mid = (att_l + att_r) / 2d;
             attenuation = 2500;
+            real_wl = wavelength;
+            hz = AOFilter.HZ_Current;
 
             double n = 0;
             double nmax = Math.Log( (att_r - att_l) / accuracy, 2) + 5;
@@ -705,16 +729,24 @@ namespace ValidationAOF
                     (AOFilter as STC_Filter).Set_Hz(AOFilter.Get_HZ_via_WL((float) wavelength), (float) att_mid);
                 }
 
-                int[] data = avesta.GetData();
+                List<DataPoint> spectrum = spectrometer.GetSpectrum();
 
+                //Поиск максимума
                 int max_ind = 0;
-                for(int i = 1; i < data.Length; i++)
+                double integral = 0;
+                double dl = 0;
+                for (int i = 1; i < spectrum.Count; i++)
                 {
-                    if (data[i] > data[max_ind])
+                    if (spectrum[i].Y > spectrum[max_ind].Y)
                         max_ind = i;
-                }
 
-                if(data[max_ind] > target)
+                    if (i < spectrum.Count - 1)
+                        dl = spectrum[i + 1].X - spectrum[i].X;
+                    integral += dl * spectrum[i].Y;
+                }
+                real_wl = spectrum[max_ind].X;
+
+                if(integral > target)
                 {
                     att_r = att_mid;
                 }
@@ -731,6 +763,7 @@ namespace ValidationAOF
                 }
             }
 
+            hz = AOFilter.HZ_Current;
             attenuation = att_mid = (att_l + att_r) / 2d; //maybe, att_mid will be useful
         }
 
@@ -742,8 +775,7 @@ namespace ValidationAOF
         private void BackWorkerCalibrateAtten_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
             Progress_calibrAtten.Visibility = Visibility.Collapsed;
-
-
+            Progress_calibrAtten.Value = 0;
         }
 
         private void Button_CalculateTrans_Click(object sender, RoutedEventArgs e)
@@ -777,7 +809,7 @@ namespace ValidationAOF
 
         private void Button_CaptureMaximumCurve_Click(object sender, RoutedEventArgs e)
         {
-            if(avesta == null)
+            if(spectrometer == null)
             {
                 MessageBox.Show("Спектрометр не подключен");
                 return;
@@ -799,11 +831,6 @@ namespace ValidationAOF
 
             try
             {
-                if (avesta.wavelength_start >= avesta.wavelength_end)
-                {
-                    throw new Exception("Предельный диапазон длин волн спектрометра не введен или введен неверно");
-                }
-
                 if (double.TryParse(textBoxStart.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.startCap) &&
                     double.TryParse(textBoxEnd.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.endCap) &&
                     double.TryParse(textBoxStep.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out dataToCapture.stepCap) &&
@@ -835,7 +862,7 @@ namespace ValidationAOF
                     throw new Exception("Введены неправильные значения параметров захвата");
                 }
 
-                if(avesta.wavelength_end < dataToCapture.endCap || avesta.wavelength_start > dataToCapture.startCap)
+                if(spectrometer.WavelengthMax < dataToCapture.endCap || spectrometer.WavelengthMin > dataToCapture.startCap)
                 {
                     throw new Exception("Спектрометр не работает в таких границах");
                 }
@@ -844,10 +871,9 @@ namespace ValidationAOF
                 MessageBox.Show(ex.Message);
                 return;
             }
-
-            dataToCapture.autoAttenuation = CheckBox_AutoAttenMaxesCurve.IsChecked == true && CurveAttenuation.Count > 1;
-
-            if(backgroundWorkerLivespectr.IsBusy)
+            
+            dataToCapture.attenuationSource = (AttenuationSources)(ComboBox_AutoAttenSource.SelectedIndex);
+            if (backgroundWorkerLivespectr.IsBusy)
             {
                 MessageBox.Show("Остановите захват кривой");
                 return;
@@ -880,14 +906,18 @@ namespace ValidationAOF
 
             //На график
             (chart.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.Clear();
-
             (chart.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.AddRange(CurveSpecMaxes);
             chart.ActualModel.InvalidatePlot(true);
+
+            (chartPowers.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.Clear();
+            (chartPowers.ActualModel.Series[2] as OxyPlot.Series.LineSeries).Points.AddRange(CurveSqrOnWavelength);
+            chartPowers.ActualModel.InvalidatePlot(true);
 
             ((BackgroundWorker)sender).Dispose();
 
             TextBlock_StatusMaximumCurve.Text = "Захвачено " + CurveSpecMaxes.Count.ToString() + " точек";
             Progress_Maxes.Visibility = Visibility.Collapsed;
+            Progress_Maxes.Value = 0;
         }
 
         private void BackWorkerCapCurve_DoWork(object sender, DoWorkEventArgs e) //Захватывает кривую спектральных максимумов
@@ -898,12 +928,10 @@ namespace ValidationAOF
             {
                 double actual_WL = dataToCapture.startCap;
 
-                /*List<PointD> listCurvesMax = new List<PointD>();
-                listCurvesMax.Clear();*/
-
                 CurveSpecMaxes.Clear();
                 CurveSpecMaxesPx.Clear();
                 CurveDeviationWL.Clear();
+                CurveSqrOnWavelength.Clear();
 
                 while (actual_WL <= dataToCapture.endCap)
                 {
@@ -913,19 +941,25 @@ namespace ValidationAOF
                     {
                         if(AOFilter.FilterType == FilterTypes.STC_Filter)
                         {
-                            if(dataToCapture.autoAttenuation && CurveAttenuation.Count > 0)
+                            if(dataToCapture.attenuationSource == AttenuationSources.DevFile)
                             {
-                                float K = (float) MMath.Interp(actual_WL, CurveAttenuation);
+                                AOFilter.Set_Hz(hz);
+                            }
+                            if (dataToCapture.attenuationSource == AttenuationSources.Slider)
+                            {
+                                float K = (float)sliderAttenuation.Value;
                                 if (K >= 1700 && K <= 2500)
                                 {
                                     (AOFilter as STC_Filter).Set_Hz(hz, K);
                                 }
-                                else
-                                    break;
                             }
-                            else
+                            if (dataToCapture.attenuationSource == AttenuationSources.AttenCurve)
                             {
-                                break;
+                                float K = (float)MMath.Interp(hz, CurveAttenuation);
+                                if (K >= 1700 && K <= 2500)
+                                {
+                                    (AOFilter as STC_Filter).Set_Hz(hz, K);
+                                }
                             }
                         }
                         else
@@ -937,22 +971,27 @@ namespace ValidationAOF
                         break;
 
                     // 2) Снять усредненную кривую
-                    CaptureAveragedSpectralCurve(dataToCapture.numberOfFrames, out double[] avrData);
-                    // 3) Учесть чувствительность матрицы &
-                    // 4) Определить точку максимума (длину волны)
+                    //CaptureAveragedSpectralCurve(dataToCapture.numberOfFrames, out double[] avrData);
+                    List<DataPoint> spectrum = spectrometer.GetSpectrum();
+
+                    // 3) Определить точку максимума (длину волны)
 
                     double minValue = 0;
                     int minIndex = 0;
                     double maxValue = 0;
                     int maxIndex = 0;
                     double value = 1;
-                    for(int i = 0; i < avrData.Length; i++)
+                    double Sqare = 0;
+                    double dl = 0; //шаг по длине волны
+
+                    for(int i = 0; i < spectrum.Count; i++)
                     {
-                        value = avrData[i];
+                        value = spectrum[i].Y;
                         if (i == 0)
                         {
                             minValue = value;
                             maxValue = value;
+                            continue;
                         }
 
                         if (value > maxValue)
@@ -965,10 +1004,15 @@ namespace ValidationAOF
                             minValue = value;
                             minIndex = i;
                         }
+
+                        if (i < spectrum.Count - 1)
+                            dl = spectrum[i + 1].X - spectrum[i].X;
+
+                        Sqare += value * dl;
                     }
 
-                    // 5) Добавить точку в список. Если в списке уже имеется точка с такой длиной волны, то усредняем
-                    double real_WL = avesta.Index2Wavelength(maxIndex); //длина волны, на которой получился максимум в реальности
+                    // 4) Добавить точку в список. Если в списке уже имеется точка с такой длиной волны, то усредняем
+                    double real_WL = spectrum[maxIndex].X; //avesta.Index2Wavelength(maxIndex); //длина волны, на которой получился максимум в реальности
 
                     bool flag = false; //Найдена точка с равным X
 
@@ -977,8 +1021,9 @@ namespace ValidationAOF
                         if(CurveSpecMaxes[i].X == real_WL)
                         {
                             maxValue = (CurveSpecMaxes[i].Y + maxValue)/2d;
-                            CurveSpecMaxes[i] = new DataPoint( real_WL, maxValue);
+                            CurveSpecMaxes[i] = spectrum[maxIndex];//new DataPoint( real_WL, maxValue);
                             CurveSpecMaxesPx[i] = new DataPoint(maxIndex, maxValue);
+                            CurveSqrOnWavelength[i] = new DataPoint(actual_WL, Sqare);
                             CurveDeviationWL[i] = new DataPoint(actual_WL, real_WL - actual_WL);
 
                             flag = true;
@@ -989,8 +1034,9 @@ namespace ValidationAOF
                     if(!flag) //Точка с равным X не найдена. Значит добавим её как новую
                     {
                         CurveSpecMaxesPx.Add(new DataPoint(maxIndex, maxValue));
-                        CurveSpecMaxes.Add(new DataPoint(real_WL, maxValue));
+                        CurveSpecMaxes.Add(spectrum[maxIndex]); //new DataPoint(real_WL, maxValue));
                         CurveDeviationWL.Add(new DataPoint(actual_WL, real_WL - actual_WL));
+                        CurveSqrOnWavelength.Add(new DataPoint(actual_WL, Sqare));
                     }
 
                     actual_WL += dataToCapture.stepCap;
@@ -1000,6 +1046,7 @@ namespace ValidationAOF
                 CurveSpecMaxesPx.Sort(PointComparer);
                 CurveSpecMaxes.Sort(PointComparer);
                 CurveDeviationWL.Sort(PointComparer);
+                CurveSqrOnWavelength.Sort(PointComparer);
 
                 e.Result = CurveSpecMaxes;
             }
@@ -1015,6 +1062,8 @@ namespace ValidationAOF
 
         }
 
+        public enum AttenuationSources : int { DevFile, Slider, AttenCurve };
+
         private struct DataToCaptureСurves
         {
             public double startCap;
@@ -1025,12 +1074,13 @@ namespace ValidationAOF
             public double accuracy;
             public int N;
             public double transmission;
-            public bool autoAttenuation;
+            public AttenuationSources attenuationSource;
+            public double optimapSquare;
         }
 
         private void Button_CaptureWidespec_Click(object sender, RoutedEventArgs e)
         {
-            if (avesta == null)
+            if (spectrometer == null)
             {
                 MessageBox.Show("Спектрометр не подключен");
                 return;
@@ -1106,19 +1156,21 @@ namespace ValidationAOF
             DataToCaptureСurves capData = (DataToCaptureСurves)e.Argument;
             try
             {
-                CaptureAveragedSpectralCurve(capData.N, out double[] avrData);
-                e.Result = avrData;
+                List<DataPoint> spectrum = new List<DataPoint>();
+                //CaptureAveragedSpectralCurve(capData.N, out double[] avrData);
+                e.Result = spectrum;
 
                 CurveSpecWidePx.Clear();
                 CurveSpecWide.Clear();
-                for(int i = 0; i < avrData.Length; i++)
+                for(int i = 0; i < spectrum.Count; i++)
                 {
-                    CurveSpecWidePx.Add(new DataPoint(i, avrData[i]));
-                    CurveSpecWide.Add(new DataPoint(avesta.Index2Wavelength(i), avrData[i]));
+                    CurveSpecWidePx.Add(new DataPoint(i, spectrum[i].Y));
+                    //CurveSpecWide.Add(new DataPoint(avesta.Index2Wavelength(i), avrData[i]));
                 }
+                CurveSpecWide.AddRange(spectrum);
 
-                CurveSpecWidePx.Sort(PointComparer);
-                CurveSpecWide.Sort(PointComparer);
+                //CurveSpecWidePx.Sort(PointComparer);
+                //CurveSpecWide.Sort(PointComparer);
             }
             catch (Exception) { }
         }
@@ -1132,7 +1184,16 @@ namespace ValidationAOF
             return 0;
         }
 
-        private void CaptureAveragedSpectralCurve(in int N, out double[] avrData, bool correctSensivity = true)
+        private static int DevPointComparer(DevPoint p1, DevPoint p2)
+        {
+            if (p1.Hz > p2.Hz)
+                return 1;
+            if (p1.Hz < p2.Hz)
+                return -1;
+            return 0;
+        }
+
+        /*private void CaptureAveragedSpectralCurve(in int N, out double[] avrData, bool correctSensivity = true)
         {
             int[][] data = new int[N][];
             
@@ -1156,13 +1217,13 @@ namespace ValidationAOF
             }
             else
                 throw new Exception("N should be >= 1");
-        }
+        }*/
 
         private void Capture_I_K_Click(object sender, RoutedEventArgs e)
         {
             //захват зависимости I от k
 
-            if (avesta == null)
+            if (spectrometer == null)
             {
                 MessageBox.Show("Спектрометр не подключен");
                 return;
@@ -1191,7 +1252,7 @@ namespace ValidationAOF
 
             try
             {
-                if (avesta.wavelength_start >= avesta.wavelength_end)
+                if (spectrometer.WavelengthMin >= spectrometer.WavelengthMax)
                 {
                     throw new Exception("Предельный диапазон длин волн спектрометра не введен или введен неверно");
                 }
@@ -1281,6 +1342,7 @@ namespace ValidationAOF
                 STC_Filter STCFilter = (STC_Filter)AOFilter;
 
                 CurveIntensityFromAtten.Clear();
+                CurveSqrFromAtten.Clear();
 
                 while (actual_K <= dataToCapture.endCap)
                 {
@@ -1293,17 +1355,24 @@ namespace ValidationAOF
                         break;
 
                     // 2) Снять кривую
-                    int[] avrData = avesta.GetData();
+                    //int[] avrData = avesta.GetData();
+                    List<DataPoint> spectrum = spectrometer.GetSpectrum();
 
+                    double Square = 0;
+                    double dl = 0;
                     indexMax = 0;
-                    for(int i = 1; i< avrData.Length; i++)
+                    for(int i = 1; i < spectrum.Count; i++)
                     {
-                        if (avrData[i] > avrData[indexMax])
+                        if (spectrum[i].Y > spectrum[indexMax].Y)
                             indexMax = i;
+                        if (i < spectrum.Count - 1)
+                            dl = spectrum[i + 1].X - spectrum[i].X;
+                        Square += spectrum[i].Y*dl;
                     }
 
                     // 3) Добавить точку в список
-                    CurveIntensityFromAtten.Add(new DataPoint(actual_K, avrData[indexMax]));
+                    CurveIntensityFromAtten.Add(new DataPoint(actual_K, spectrum[indexMax].Y));
+                    CurveSqrFromAtten.Add(new DataPoint(actual_K, Square));
 
                     actual_K += dataToCapture.stepCap;
                     
@@ -1316,7 +1385,6 @@ namespace ValidationAOF
             {
 
             }
-
         }
 
         private void BackWorkerCapCurve_I_K_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
@@ -1330,6 +1398,7 @@ namespace ValidationAOF
 
             textBlock_Status_I_K.Text = "Захвачено " + CurveIntensityFromAtten.Count.ToString() + " точек";
             Progress_I_K.Visibility = Visibility.Collapsed;
+            Progress_I_K.Value = 0;
         }
 
         private void B_Save_I_K_Click(object sender, RoutedEventArgs e)
@@ -1339,6 +1408,7 @@ namespace ValidationAOF
                 if (CurveIntensityFromAtten.Count > 0)
                 {
                     SaveCurve2File(CurveIntensityFromAtten, NewFileName("Curve_I_K","txt"));
+                    SaveCurve2File(CurveSqrFromAtten, NewFileName("Curve_S_K", "txt"));
                 }
                 else
                     throw new Exception("Кривая отсутствует");
@@ -1361,6 +1431,35 @@ namespace ValidationAOF
                 for(int i = 0; i < dataPoints.Count; i++)
                 {
                     sw.WriteLine(dataPoints[i].X.ToString("F", CultureInfo.InvariantCulture) + ' ' + dataPoints[i].Y.ToString("F", CultureInfo.InvariantCulture));
+                }
+
+                sw.Dispose();
+            }
+        }
+
+        public static void SaveDevFile(List<DevPoint> devPoints, string filename, AO_Filter filter)
+        {
+            using(var sw = new StreamWriter(filename))
+            {
+                /*string[] lines = File.ReadAllLines(filter.Ask_loaded_dev_file());
+                if(lines.Length > 0)
+                {
+                    if(lines[0].ToLower() == "true")
+                    {
+                        sw.WriteLine("true");
+                    }
+                    else
+                    {
+                        if (lines[0].ToLower() == "false")
+                        {
+                            sw.WriteLine("false");
+                        }
+                    }
+                }*/
+
+                for(int i = 0; i < devPoints.Count; i++)
+                {
+                    sw.WriteLine(String.Format(CultureInfo.InvariantCulture, "{0} {1} {2}", devPoints[i].Hz, devPoints[i].Wl, devPoints[i].K));
                 }
 
                 sw.Dispose();
@@ -1506,11 +1605,14 @@ namespace ValidationAOF
 
         private void ReloadConfig_Click(object sender, RoutedEventArgs e)
         {
-            if(avesta != null)
+            if(spectrometer != null)
             {
                 try
                 {
-                    avesta.LoadConfigFromFile("ConfigFile.xml");
+                    if (spectrometer.Type == Spectrometer.Spectrometer.SpectrometerType.Avesta)
+                        (spectrometer as Avesta).LoadConfigFromFile("ConfigFile.xml");
+                    else
+                        MessageBox.Show("Эта кнопка только для Avesta спектрометра");
                 }
                 catch(Exception exc)
                 {
@@ -1528,6 +1630,7 @@ namespace ValidationAOF
                     SaveCurve2File(CurveSpecMaxes, NewFileName("Curve_Maxes","txt"));
                     SaveCurve2File(CurveSpecMaxesPx, NewFileName("Curve_MaxesPx","txt"));
                     SaveCurve2File(CurveDeviationWL, NewFileName("Curve_Deviations","txt"));
+                    SaveCurve2File(CurveSqrOnWavelength, NewFileName("Curve_PowersOnWaves","txt"));
                 }
                 else
                     throw new Exception("Кривая отсутствует");
@@ -1559,12 +1662,13 @@ namespace ValidationAOF
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-
+            //OmniDriver.NETWrapper wrapper = new OmniDriver.NETWrapper();
         }
 
         private void AutoAtten_Click(object sender, RoutedEventArgs e)
         {
-            SetViaWavelength((float) sliderWavelength.Value);
+            if(AOFilter != null)
+                SetViaWavelength((float) sliderWavelength.Value);
         }
 
         private void Button_LoadTrans_Click(object sender, RoutedEventArgs e)
@@ -1606,11 +1710,32 @@ namespace ValidationAOF
                 }
                 else
                     throw new Exception("Кривая отсутствует");
+
+                if (CurvesForDev.Count > 0)
+                {
+                    SaveDevFile(CurvesForDev, NewFileName(FileNameWithoutExtansion(AOFilter.Ask_loaded_dev_file()) + "_new", "dev"), AOFilter);
+                }
+                else
+                    throw new Exception("Калибровочная кривая отсутствует");
             }
             catch (Exception exc)
             {
                 MessageBox.Show(exc.Message);
             }
+        }
+
+        private static string FileNameWithoutExtansion(string filename)
+        {
+            string result = "";
+            string[] parts = filename.Split('.');
+            for(int i = 0; i < parts.Length-1; i++)
+            {
+                result += parts[i];
+            }
+            if (result.Length == 0) //No extension
+                return filename;
+
+            return result;
         }
 
         private void Butto_LoadAtten_Click(object sender, RoutedEventArgs e)
@@ -1629,15 +1754,18 @@ namespace ValidationAOF
 
         }
 
-        private int countAvrgLive = 1;
+        //private int countAvrgLive = 1;
 
         private void TextBox_CountAvrgLive_TextChanged(object sender, TextChangedEventArgs e)
         {
+            if (spectrometer == null)
+                return;
+
             int value = 1;
             if(int.TryParse(TextBox_CountAvrgLive.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
             {
                 if (value > 0)
-                    countAvrgLive = value;
+                    spectrometer.AveragesCount = value;
             }
         }
 
@@ -1693,7 +1821,56 @@ namespace ValidationAOF
             }
             catch (Exception ex) { }
 
-            return basisName + '.' + ext;
+            return basisName + "_0." + ext;
+        }
+
+        private void Button_MakeDevFile_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (CurveSqrFromAtten.Count > 0)
+                {
+                    SaveCurve2File(CurveAttenuation, NewFileName("Curve_Attenuation", "txt"));
+                }
+                else
+                    throw new Exception("Кривая отсутствует");
+            }
+            catch (Exception exc)
+            {
+                MessageBox.Show(exc.Message);
+            }
+        }
+
+        private void ComboBox_AutoAttenSource_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (AOFilter != null)
+                SetViaWavelength((float)sliderWavelength.Value);
+        }
+
+        private void Tb_exposure_KeyDown(object sender, KeyEventArgs e)
+        {
+            if(e.Key == Key.Enter)
+            {
+                Button_apply_click(null, null);
+            }
+        }
+
+        private void Button_Click_2(object sender, RoutedEventArgs e)
+        {
+            if(spectrometer != null)
+            {
+                string info = Enum.GetName(typeof(Spectrometer.Spectrometer.SpectrometerType), spectrometer.Type)+'\n';
+                info += "Range: " + spectrometer.WavelengthMin.ToString() + " - " + spectrometer.WavelengthMax.ToString() + '\n';
+                info += "ID: " + spectrometer.ID.ToString() + '\n';
+                info += "Exposure: " + spectrometer.Exposure.ToString("F2") + '\n';
+                info += "Averages count: " + spectrometer.AveragesCount.ToString() + '\n';
+
+                MessageBox.Show(info);
+            }
+            else
+            {
+                MessageBox.Show("Спектрометр не подключен");
+            }
         }
     }
 

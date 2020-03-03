@@ -88,7 +88,6 @@
   <ItemGroup>
     <None Include="aom_new.dll" />
     <None Include="aom_old.dll" />
-    <None Include="ftd2xx.dll" />
     <None Include="msvcp120.dll" />
     <None Include="msvcp140.dll" />
     <None Include="msvcr120.dll" />
