@@ -44,6 +44,23 @@ namespace ValidationAOF
         float timeInterval = 50; //ms
         public bool capturing = false;
 
+        public static readonly DependencyProperty ActualPlotMinimumProperty = DependencyProperty.Register("ActualPlotMinimum", typeof(double), typeof(MainWindow),
+            new FrameworkPropertyMetadata(10d, OnRangeChanged));
+
+        public static readonly DependencyProperty ActualPlotMaximumProperty = DependencyProperty.Register("ActualPlotMaximum", typeof(double), typeof(MainWindow),
+            new FrameworkPropertyMetadata(120d, OnRangeChanged));
+
+        private static void OnRangeChanged(DependencyObject d, DependencyPropertyChangedEventArgs eventArgs)
+        {
+            (d as MainWindow).chart.InvalidatePlot();
+            (d as MainWindow).chartPowers.InvalidatePlot();
+        }
+
+        public double ActualPlotMinimum
+        {
+            get => (double)GetValue(ActualPlotMinimumProperty);
+            set => SetValue(ActualPlotMinimumProperty, value);
+        }
 
         //Данные захвата
         List<DataPoint> CurveSpecWide = new List<DataPoint>();
@@ -703,7 +720,7 @@ namespace ValidationAOF
 
                 backWorkerCalibrateAtten.ReportProgress(Convert.ToInt32( 100d*(w - dataToCapture.startCap)/(dataToCapture.endCap - dataToCapture.startCap) ));
             }
-
+            
             CurveAttenuation.Sort(PointComparer);
             CurvesForDev.Sort(DevPointComparer);
         }
@@ -720,7 +737,7 @@ namespace ValidationAOF
             double n = 0;
             double nmax = Math.Log( (att_r - att_l) / accuracy, 2) + 5;
 
-            while(n <= nmax)
+            while (n <= nmax)
             {
                 att_mid = (att_l + att_r) / 2d;
 
@@ -731,8 +748,8 @@ namespace ValidationAOF
 
                 List<DataPoint> spectrum = spectrometer.GetSpectrum();
 
-                //Поиск максимума
-                int max_ind = 0;
+                //Поиск максимума и интеграл
+                /*int max_ind = 0;
                 double integral = 0;
                 double dl = 0;
                 for (int i = 1; i < spectrum.Count; i++)
@@ -744,9 +761,12 @@ namespace ValidationAOF
                         dl = spectrum[i + 1].X - spectrum[i].X;
                     integral += dl * spectrum[i].Y;
                 }
-                real_wl = spectrum[max_ind].X;
+                real_wl = spectrum[max_ind].X;*/
 
-                if(integral > target)
+                FindMaximumAndIntegral(spectrum, wavelength, 30 /*+-30 нм*/, out DataPoint maximum, out double integral);
+                real_wl = maximum.X;
+
+                if (integral > target)
                 {
                     att_r = att_mid;
                 }
@@ -765,6 +785,27 @@ namespace ValidationAOF
 
             hz = AOFilter.HZ_Current;
             attenuation = att_mid = (att_l + att_r) / 2d; //maybe, att_mid will be useful
+        }
+
+        public void FindMaximumAndIntegral(List<DataPoint> points, double x0, double d, out DataPoint maximum, out double integral)
+        {
+            int max_ind = 0;
+            integral = 0;
+            double dl = 0;
+            for (int i = 1; i < points.Count; i++)
+            {
+                if (i < points.Count - 1)
+                    dl = points[i + 1].X - points[i].X;
+                integral += dl * points[i].Y;
+
+                if(points[i].X >= x0-d && points[i].X <= x0+d)
+                {
+                    if (points[i].Y > points[max_ind].Y)
+                        max_ind = i;
+                }
+            }
+
+            maximum = points[max_ind];
         }
 
         private void BackWorkerCalibrateAtten_ProgressChanged(object sender, ProgressChangedEventArgs e)
@@ -976,15 +1017,17 @@ namespace ValidationAOF
 
                     // 3) Определить точку максимума (длину волны)
 
-                    double minValue = 0;
+                    /*double minValue = 0;
                     int minIndex = 0;
                     double maxValue = 0;
                     int maxIndex = 0;
                     double value = 1;
                     double Sqare = 0;
-                    double dl = 0; //шаг по длине волны
+                    double dl = 0; //шаг по длине волны*/
 
-                    for(int i = 0; i < spectrum.Count; i++)
+                    FindMaximumAndIntegral(spectrum, actual_WL, 30 /*+- 30 нм*/, out DataPoint maximum, out double integral);
+
+                    /*for(int i = 0; i < spectrum.Count; i++)
                     {
                         value = spectrum[i].Y;
                         if (i == 0)
@@ -1009,10 +1052,11 @@ namespace ValidationAOF
                             dl = spectrum[i + 1].X - spectrum[i].X;
 
                         Sqare += value * dl;
-                    }
+                    }*/
 
                     // 4) Добавить точку в список. Если в списке уже имеется точка с такой длиной волны, то усредняем
-                    double real_WL = spectrum[maxIndex].X; //avesta.Index2Wavelength(maxIndex); //длина волны, на которой получился максимум в реальности
+                    double real_WL = maximum.X; //avesta.Index2Wavelength(maxIndex); //длина волны, на которой получился максимум в реальности
+                    double maxValue = maximum.X;
 
                     bool flag = false; //Найдена точка с равным X
 
@@ -1021,9 +1065,9 @@ namespace ValidationAOF
                         if(CurveSpecMaxes[i].X == real_WL)
                         {
                             maxValue = (CurveSpecMaxes[i].Y + maxValue)/2d;
-                            CurveSpecMaxes[i] = spectrum[maxIndex];//new DataPoint( real_WL, maxValue);
-                            CurveSpecMaxesPx[i] = new DataPoint(maxIndex, maxValue);
-                            CurveSqrOnWavelength[i] = new DataPoint(actual_WL, Sqare);
+                            CurveSpecMaxes[i] = new DataPoint( real_WL, maxValue);
+                            //CurveSpecMaxesPx[i] = new DataPoint(maxIndex, maxValue);
+                            CurveSqrOnWavelength[i] = new DataPoint(real_WL, integral);
                             CurveDeviationWL[i] = new DataPoint(actual_WL, real_WL - actual_WL);
 
                             flag = true;
@@ -1033,17 +1077,17 @@ namespace ValidationAOF
 
                     if(!flag) //Точка с равным X не найдена. Значит добавим её как новую
                     {
-                        CurveSpecMaxesPx.Add(new DataPoint(maxIndex, maxValue));
-                        CurveSpecMaxes.Add(spectrum[maxIndex]); //new DataPoint(real_WL, maxValue));
+                        //CurveSpecMaxesPx.Add(new DataPoint(maxIndex, maxValue));
+                        CurveSpecMaxes.Add(maximum); //new DataPoint(real_WL, maxValue));
                         CurveDeviationWL.Add(new DataPoint(actual_WL, real_WL - actual_WL));
-                        CurveSqrOnWavelength.Add(new DataPoint(actual_WL, Sqare));
+                        CurveSqrOnWavelength.Add(new DataPoint(real_WL, integral));
                     }
 
                     actual_WL += dataToCapture.stepCap;
                     backWorkerCapCurve.ReportProgress(Convert.ToInt32(100*(actual_WL-dataToCapture.startCap)/(dataToCapture.endCap-dataToCapture.startCap)));
                 }
 
-                CurveSpecMaxesPx.Sort(PointComparer);
+                //CurveSpecMaxesPx.Sort(PointComparer);
                 CurveSpecMaxes.Sort(PointComparer);
                 CurveDeviationWL.Sort(PointComparer);
                 CurveSqrOnWavelength.Sort(PointComparer);
@@ -1459,7 +1503,7 @@ namespace ValidationAOF
 
                 for(int i = 0; i < devPoints.Count; i++)
                 {
-                    sw.WriteLine(String.Format(CultureInfo.InvariantCulture, "{0} {1} {2}", devPoints[i].Hz, devPoints[i].Wl, devPoints[i].K));
+                    sw.WriteLine(String.Format(CultureInfo.InvariantCulture, "{0:F3} {1:F3} {2:F3}", devPoints[i].Hz, devPoints[i].Wl, devPoints[i].K));
                 }
 
                 sw.Dispose();
@@ -1605,6 +1649,7 @@ namespace ValidationAOF
 
         private void ReloadConfig_Click(object sender, RoutedEventArgs e)
         {
+            
             if(spectrometer != null)
             {
                 try
