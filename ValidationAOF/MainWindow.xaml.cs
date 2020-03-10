@@ -42,6 +42,7 @@ namespace ValidationAOF
         BackgroundWorker worker_sequenceMax = null;
 
         float timeInterval = 50; //ms
+        double aof_delay = 0;
         public bool capturing = false;
 
         public static readonly DependencyProperty ActualPlotMinimumProperty = DependencyProperty.Register("ActualPlotMinimum", typeof(double), typeof(MainWindow),
@@ -140,9 +141,10 @@ namespace ValidationAOF
             (chart.ActualModel.Series[0] as OxyPlot.Series.LineSeries).Points.AddRange(CurveLive);
 
             double power = IntegrateCurve(CurveLive);
+            FindMaximumAndIntegral(CurveLive, sliderWavelength.Value, 30/*нм*/, out DataPoint maximum, out double integral);
             (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Clear();
-            (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(sliderWavelength.Value, 0));
-            (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(sliderWavelength.Value, power));
+            (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(maximum.X, 0));
+            (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(maximum.X, integral));
 
             chart.ActualModel.InvalidatePlot(true);
             chartPowers.ActualModel.InvalidatePlot(true);
@@ -707,20 +709,30 @@ namespace ValidationAOF
             DataToCaptureСurves dataToCapture = (DataToCaptureСurves)e.Argument;
 
             CurveAttenuation.Clear();
-            CurvesForDev.Count();
+            CurvesForDev.Clear();
 
-            for(double w = dataToCapture.startCap; w <= dataToCapture.endCap; w += dataToCapture.stepCap)
+            double actual_WL = dataToCapture.reverse ? dataToCapture.endCap : dataToCapture.startCap;
+
+            while(dataToCapture.reverse ? actual_WL >= dataToCapture.startCap : actual_WL <= dataToCapture.endCap)
             {
-                //double targetIntensity = dataToCapture.transmission * MMath.Interp(w, CurveSpecWide); //оптимальное пропускание * точка на широком спектре
 
-                CalibrationOnWavelength(w, dataToCapture.accuracy, dataToCapture.optimapSquare, out double attenuation, out double hz, out double real_wl);
+                CalibrationOnWavelength(actual_WL, dataToCapture.accuracy, dataToCapture.optimapSquare, out double attenuation, out double hz, out double real_wl);
 
                 CurveAttenuation.Add(new DataPoint(hz, attenuation));
                 CurvesForDev.Add(new DevPoint() { Hz = hz, Wl = real_wl, K = attenuation });
 
-                backWorkerCalibrateAtten.ReportProgress(Convert.ToInt32( 100d*(w - dataToCapture.startCap)/(dataToCapture.endCap - dataToCapture.startCap) ));
+                if (dataToCapture.reverse)
+                {
+                    backWorkerCalibrateAtten.ReportProgress(Convert.ToInt32(100d * (dataToCapture.endCap - actual_WL) / (dataToCapture.endCap - dataToCapture.startCap)));
+                    actual_WL -= dataToCapture.stepCap;
+                }
+                else
+                {
+                    backWorkerCalibrateAtten.ReportProgress(Convert.ToInt32(100d * (actual_WL - dataToCapture.startCap) / (dataToCapture.endCap - dataToCapture.startCap)));
+                    actual_WL += dataToCapture.stepCap;
+                }
             }
-            
+
             CurveAttenuation.Sort(PointComparer);
             CurvesForDev.Sort(DevPointComparer);
         }
@@ -744,6 +756,7 @@ namespace ValidationAOF
                 if((float) wavelength >= AOFilter.WL_Min && (float) wavelength <= AOFilter.WL_Max && (float)att_mid >= 1700 && (float)att_mid <= 2500)
                 {
                     (AOFilter as STC_Filter).Set_Hz(AOFilter.Get_HZ_via_WL((float) wavelength), (float) att_mid);
+                    Thread.Sleep(Convert.ToInt32(aof_delay));
                 }
 
                 List<DataPoint> spectrum = spectrometer.GetSpectrum();
@@ -920,6 +933,8 @@ namespace ValidationAOF
                 return;
             }
 
+            dataToCapture.reverse = reverseCap.IsChecked == true;
+
             Progress_Maxes.Visibility = Visibility.Visible;
             backWorkerCapCurve = new BackgroundWorker();
             backWorkerCapCurve.DoWork += BackWorkerCapCurve_DoWork;
@@ -967,14 +982,14 @@ namespace ValidationAOF
 
             try
             {
-                double actual_WL = dataToCapture.startCap;
+                double actual_WL = dataToCapture.reverse ? dataToCapture.endCap : dataToCapture.startCap;
 
                 CurveSpecMaxes.Clear();
                 CurveSpecMaxesPx.Clear();
                 CurveDeviationWL.Clear();
                 CurveSqrOnWavelength.Clear();
 
-                while (actual_WL <= dataToCapture.endCap)
+                while (dataToCapture.reverse ? actual_WL >= dataToCapture.startCap : actual_WL <= dataToCapture.endCap)
                 {
                     // 1) - set wavelength
                     float hz = AOFilter.Get_HZ_via_WL( (float)actual_WL );
@@ -1010,6 +1025,8 @@ namespace ValidationAOF
                     }
                     else
                         break;
+
+                    Thread.Sleep(Convert.ToInt32(aof_delay)); //ms
 
                     // 2) Снять усредненную кривую
                     //CaptureAveragedSpectralCurve(dataToCapture.numberOfFrames, out double[] avrData);
@@ -1083,8 +1100,16 @@ namespace ValidationAOF
                         CurveSqrOnWavelength.Add(new DataPoint(real_WL, integral));
                     }
 
-                    actual_WL += dataToCapture.stepCap;
-                    backWorkerCapCurve.ReportProgress(Convert.ToInt32(100*(actual_WL-dataToCapture.startCap)/(dataToCapture.endCap-dataToCapture.startCap)));
+                    if(dataToCapture.reverse)
+                    {
+                        actual_WL -= dataToCapture.stepCap;
+                        backWorkerCapCurve.ReportProgress(Convert.ToInt32(100 * (dataToCapture.endCap - actual_WL) / (dataToCapture.endCap - dataToCapture.startCap)));
+                    }
+                    else
+                    {
+                        actual_WL += dataToCapture.stepCap;
+                        backWorkerCapCurve.ReportProgress(Convert.ToInt32(100*(actual_WL-dataToCapture.startCap)/(dataToCapture.endCap-dataToCapture.startCap)));
+                    }
                 }
 
                 //CurveSpecMaxesPx.Sort(PointComparer);
@@ -1120,6 +1145,7 @@ namespace ValidationAOF
             public double transmission;
             public AttenuationSources attenuationSource;
             public double optimapSquare;
+            public bool reverse;
         }
 
         private void Button_CaptureWidespec_Click(object sender, RoutedEventArgs e)
@@ -1145,6 +1171,9 @@ namespace ValidationAOF
                 MessageBox.Show("Остановите запись перед началом захвата кривой");
                 return;
             }
+
+            dataToCapture.reverse = reverseCap.IsChecked == true;
+            
 
             BackgroundWorker backWorkerCapWideSpec = new BackgroundWorker();
             backWorkerCapWideSpec.WorkerReportsProgress = true;
@@ -1915,6 +1944,17 @@ namespace ValidationAOF
             else
             {
                 MessageBox.Show("Спектрометр не подключен");
+            }
+        }
+
+        private void TextBox_aof_delay_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if(double.TryParse(tb_exposure.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
+            {
+                if (value >= 0)
+                {
+                    aof_delay = value;
+                }
             }
         }
     }

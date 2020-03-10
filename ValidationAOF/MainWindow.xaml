@@ -160,9 +160,13 @@
                             <TextBlock Text="кривой(-ым)" VerticalAlignment="Center"/>
                         </StackPanel>
 
-                        <StackPanel>
+                        <StackPanel Orientation="Horizontal">
                             <Button Content="Info" Width="40" HorizontalAlignment="Left" Margin="2"
                                     Click="Button_Click_2"/>
+                            <ToggleButton x:Name="reverseCap" Content="Reverse" Margin="2"/>
+                            <TextBlock Text="Задержка при перестройке:" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox Text="0" Name="textBox_aof_delay" MinWidth="50" TextAlignment="Center" Margin="2"
+                                     TextChanged="TextBox_aof_delay_TextChanged"/>
                         </StackPanel>
 
                         <TextBlock IsEnabled="False" Text="Диапазон работы прибора:" Opacity="0.5" Visibility="Collapsed"/>
