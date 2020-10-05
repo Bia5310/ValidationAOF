@@ -19,6 +19,10 @@ namespace Spectrometer
             wrapper = new NETWrapper();
         }
 
+        public override double WavelengthMin => wrapper.getWavelengths(id)[0];
+
+        public override double WavelengthMax => wrapper.getWavelengths(id).Last();
+
         public OceanOptics(int deviceId)
         {
             id = deviceId;
@@ -38,12 +42,11 @@ namespace Spectrometer
                 wrapper.closeAllSpectrometers();
             }
             catch (Exception) { }
-            
         }
 
         public override SpectrometerType Type => SpectrometerType.OceanOptics;
 
-        public override double Exposure { get => wrapper.getIntegrationTime(id); set => wrapper.setIntegrationTime(id, (int)(1000*value)); }
+        public override double Exposure { get => wrapper.getIntegrationTime(id); set => wrapper.setIntegrationTime(id, (int)value); }
 
         public static OceanOptics Connect(int deviceID)
         {
@@ -55,7 +58,7 @@ namespace Spectrometer
         {
             double[] spectrum = wrapper.getSpectrum(id);
             List<DataPoint> dataPoints = new List<DataPoint>();
-            for(int i = 0; i < spectrum.Length; i++)
+            for (int i = 0; i < spectrum.Length; i++)
             {
                 dataPoints.Add(new DataPoint(wavelengthes[i], spectrum[i]));
             }
@@ -77,7 +80,7 @@ namespace Spectrometer
         public static List<int> EnumerateOceanOpticsDeviceIDs()
         {
             List<int> devices = new List<int>();
-            
+
             wrapper.openAllSpectrometers();
             int n = wrapper.getNumberOfSpectrometersFound();
             for (int i = 0; i < n; i++)

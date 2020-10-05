@@ -9,7 +9,7 @@
         Background="WhiteSmoke"
         Loaded="Window_Loaded"
         Name="mainWindow"
-        Title="MainWindow" Height="800" Width="1100">
+        Title="MainWindow" Height="750" Width="1100">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -61,7 +61,7 @@
                 </oxy:Plot.Series>
             </oxy:Plot>
 
-            <StackPanel Grid.Row="4" Grid.Column="0" Orientation="Horizontal">
+            <DockPanel Grid.Row="4" Grid.Column="0">
                 <Border MinWidth="300" Padding="2" BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2">
                     <StackPanel Margin="2 0 0 0">
                         <TextBlock Text="АОФ" Margin="2"/>
@@ -183,14 +183,25 @@
                         
                     </StackPanel>
                 </Border>
-            </StackPanel>
+
+                <Border CornerRadius="4" Padding="2" Background="White" BorderBrush="LightGray" BorderThickness="0 0 0 2" Margin="2">
+                    <DockPanel>
+                        <TextBlock Text="Log:" DockPanel.Dock="Top" Margin="2"/>
+                        <ListBox x:Name="logList" BorderThickness="1" Margin="2">
+                    
+                        </ListBox> 
+                    </DockPanel>
+
+                </Border>
+
+            </DockPanel>
 
             <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" VerticalAlignment="Center" Height="4" Margin="2" Background="LightGray"/>
         </Grid>
 
         <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <Border BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2 6 2 0">
+                <Border Visibility="Collapsed" BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2 6 2 0">
                     <Expander Header="Кривая широкого спектра" IsExpanded="True" Margin="2">
                         <StackPanel Margin="2">
                             <Button Content="Захватить" Margin="3" Name="Button_CaptureWidespec"
@@ -227,13 +238,13 @@
                     </Expander>
                 </Border>
 
-                <Path Fill="LightGray" Stretch="Fill" Height="10.5" Width="20.375">
+                <Path Visibility="Collapsed" Fill="LightGray" Stretch="Fill" Height="10.5" Width="20.375">
                     <Path.Data>
                         <PathGeometry Figures="M2,0 L2,2 L0,2 L5,6 L10,2 L8,2 L8,0 Z"/>
                     </Path.Data>
                 </Path>
 
-                <Border BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2 1 2 0">
+                <Border BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2 1 2 4">
                     <Expander Header="Кривая мощностей S(λ) и пиков" IsExpanded="True" Margin="2">
                         <StackPanel Margin="2">
                             <TextBlock Text="Параметры захвата:" Margin="3"/>
@@ -288,13 +299,13 @@
                     </Expander>
                 </Border>
 
-                <Path Fill="LightGray" Stretch="Fill" Height="10.5" Width="20.375">
+                <Path Fill="LightGray" Stretch="Fill" Height="10.5" Width="20.375" Visibility="Collapsed">
                     <Path.Data>
                         <PathGeometry Figures="M2,0 L2,2 L0,2 L5,6 L10,2 L8,2 L8,0 Z"/>
                     </Path.Data>
                 </Path>
 
-                <Border BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2 1 2 0">
+                <Border Visibility="Collapsed" BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2 1 2 0">
                     <Expander Header="Коэффициент пропускания" IsExpanded="True" Margin="2">
                         <StackPanel Margin="2">
                             <UniformGrid Columns="3">
@@ -316,7 +327,7 @@
                     </Expander>
                 </Border>
 
-                <Path Fill="LightGray" Stretch="Fill" Height="10.5" Width="20.375">
+                <Path Visibility="Collapsed" Fill="LightGray" Stretch="Fill" Height="10.5" Width="20.375">
                     <Path.Data>
                         <PathGeometry Figures="M2,0 L2,2 L0,2 L5,6 L10,2 L8,2 L8,0 Z"/>
                     </Path.Data>
@@ -408,6 +419,16 @@
                             </StackPanel>
                         </StackPanel>
                     </Expander>
+                </Border>
+
+                <Border BorderThickness="0 0 0 2" BorderBrush="LightGray" CornerRadius="4" Background="White" Margin="2 1 2 0">
+                    <StackPanel Margin="2">
+                        <StackPanel Orientation="Horizontal" Margin="2">
+                            <TextBlock Margin="2" Text="S: "/>
+                            <TextBox HorizontalAlignment="Stretch" MinWidth="70" Margin="2" x:Name="textBox_Smax" IsReadOnly="True"/>
+                        </StackPanel> 
+
+                    </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>

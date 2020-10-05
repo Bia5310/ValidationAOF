@@ -30,43 +30,30 @@ namespace Spectrometer
 
         public static Spectrometer ConnectToFirstDevice()
         {
-            Avesta avestaDevice = Avesta.Connect(0);
+            Spectrometer spectrometer = null;
 
-            if (avestaDevice == null)
-                throw new Exception("No connected devices");
-
-            return avestaDevice;
-
-            List<DeviceInfo> devices = EnumerateAllDevices();
-            if (devices.Count == 0)
-                throw new Exception("No devices connected.");
-            else
+            try
             {
-                if (devices[0].Type == SpectrometerType.Avesta)
+                var ooIds = OceanOptics.EnumerateOceanOpticsDeviceIDs();
+                if (ooIds.Count > 0)
                 {
-                    return Avesta.Connect(0);
-                }
-                if (devices[0].Type == SpectrometerType.OceanOptics)
-                {
-                    return OceanOptics.Connect(0);
+                    spectrometer = new OceanOptics(ooIds[0]);
                 }
             }
+            catch (Exception ex)
+            {
+                
+            }
 
-            return null;
-        }
+            if (spectrometer == null) //если OceanOptics не был подключен
+            {
+                spectrometer = Avesta.Connect(0);
+            }
 
-        public static List<DeviceInfo> EnumerateAllDevices()
-        {
-            List<DeviceInfo> devices = new List<DeviceInfo>();
-            //List<int> avestaDevices = Avesta.EnumerateAvestaDevicesIDs();
-            //List<int> ooDevices = OceanOptics.EnumerateOceanOpticsDeviceIDs();
+            if (spectrometer == null)
+                throw new Exception("No connected devices");
 
-            /*for (int i = 0; i < avestaDevices.Count; i++)
-                devices.Add(new DeviceInfo(SpectrometerType.Avesta, avestaDevices[i]));*/
-            /*for (int i = 0; i < ooDevices.Count; i++)
-                devices.Add(new DeviceInfo(SpectrometerType.OceanOptics, ooDevices[i]));*/
-
-            return devices;
+            return spectrometer;
         }
 
         public struct DeviceInfo

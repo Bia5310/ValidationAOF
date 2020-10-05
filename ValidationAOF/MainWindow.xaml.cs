@@ -45,23 +45,8 @@ namespace ValidationAOF
         double aof_delay = 0;
         public bool capturing = false;
 
-        public static readonly DependencyProperty ActualPlotMinimumProperty = DependencyProperty.Register("ActualPlotMinimum", typeof(double), typeof(MainWindow),
-            new FrameworkPropertyMetadata(10d, OnRangeChanged));
-
-        public static readonly DependencyProperty ActualPlotMaximumProperty = DependencyProperty.Register("ActualPlotMaximum", typeof(double), typeof(MainWindow),
-            new FrameworkPropertyMetadata(120d, OnRangeChanged));
-
-        private static void OnRangeChanged(DependencyObject d, DependencyPropertyChangedEventArgs eventArgs)
-        {
-            (d as MainWindow).chart.InvalidatePlot();
-            (d as MainWindow).chartPowers.InvalidatePlot();
-        }
-
-        public double ActualPlotMinimum
-        {
-            get => (double)GetValue(ActualPlotMinimumProperty);
-            set => SetValue(ActualPlotMinimumProperty, value);
-        }
+        private const double atten_max = 2500;
+        private const double atten_min = 1700;
 
         //Данные захвата
         List<DataPoint> CurveSpecWide = new List<DataPoint>();
@@ -142,9 +127,31 @@ namespace ValidationAOF
 
             double power = IntegrateCurve(CurveLive);
             FindMaximumAndIntegral(CurveLive, sliderWavelength.Value, 30/*нм*/, out DataPoint maximum, out double integral);
+
             (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Clear();
-            (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(maximum.X, 0));
-            (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(maximum.X, integral));
+
+            for (int i = 0; i < CurveLive.Count-1; i++)
+            {
+                if(maximum.X >= CurveLive[i].X && maximum.X < CurveLive[i+1].X)
+                {
+                    (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(maximum.X, integral));
+                }
+                else
+                {
+                    (chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(CurveLive[i].X, 0));
+                }
+            }
+
+            try
+            {
+                textBox_Smax.Text = integral.ToString("F2");
+            }
+            catch (Exception) { }
+
+            //(chartPowers.ActualModel.Series[1] as OxyPlot.Series.LineSeries).Points.Add(new DataPoint(maximum.X+0.001, integral));
+
+            /*chartPowers.ActualModel.Annotations.Add(new OxyPlot.Annotations.LineAnnotation() {
+                });*/
 
             chart.ActualModel.InvalidatePlot(true);
             chartPowers.ActualModel.InvalidatePlot(true);
@@ -338,9 +345,9 @@ namespace ValidationAOF
             //sliderFrequency.Value = AOFilter.HZ_Current;
             //textBoxFrequency.Text = sliderFrequency.Value.ToString("F2", CultureInfo.InvariantCulture);
 
-            sliderAttenuation.Maximum = 2500;
-            sliderAttenuation.Minimum = 1700;
-            //sliderAttenuation.Value = 2500;
+            sliderAttenuation.Maximum = atten_max;
+            sliderAttenuation.Minimum = atten_min;
+            //sliderAttenuation.Value = atten_max;
             //textBoxAttenuation.Text = sliderAttenuation.Value.ToString("F2", CultureInfo.InvariantCulture);
 
             sliderWavenumber.Minimum = 1e7f / sliderWavelength.Maximum;
@@ -359,10 +366,13 @@ namespace ValidationAOF
             {
                 AOFilter = AO_Filter.Find_and_connect_AnyFilter();
                 if (AOFilter == null)
+                {
                     MessageBox.Show("Фильтры не найдены");
+                }
                 else
                 {
-                    attenuationAvailable = AOFilter.GetType() == typeof(STC_Filter);
+                    attenuationAvailable = AOFilter.FilterType == FilterTypes.STC_Filter;
+                    logList.Items.Add("Фильтр подключен: " + Enum.GetName(typeof(FilterTypes), AOFilter.FilterType));
                 }
             }
             else //значит надо отключить
@@ -519,7 +529,7 @@ namespace ValidationAOF
                             useAttenuation = false;
                     }
 
-                    if(attenuation >= 1700 && attenuation <= 2500 && useAttenuation)
+                    if(attenuation >= atten_min && attenuation <= atten_max && useAttenuation)
                         (AOFilter as STC_Filter).Set_Hz(hz, attenuation);
                     else
                         AOFilter.Set_Hz(hz);
@@ -550,7 +560,7 @@ namespace ValidationAOF
             textBoxAttenuation.Text = sliderAttenuation.Value.ToString("F2", CultureInfo.InvariantCulture);
             float hz = (float)AOFilter.HZ_Current;
             float K = (float)sliderAttenuation.Value;
-            if(hz >= AOFilter.HZ_Min && hz <= AOFilter.HZ_Max && K >= 1700 && K <= 2500)
+            if(hz >= AOFilter.HZ_Min && hz <= AOFilter.HZ_Max && K >= atten_min && K <= atten_max)
             {
                 STCFilter.Set_Hz(hz, K);
             }
@@ -739,10 +749,10 @@ namespace ValidationAOF
 
         private void CalibrationOnWavelength(double wavelength, double accuracy, double target, out double attenuation, out double hz, out double real_wl)
         {
-            double att_l = 1700;
-            double att_r = 2500;
+            double att_l = atten_min;
+            double att_r = atten_max;
             double att_mid = (att_l + att_r) / 2d;
-            attenuation = 2500;
+            attenuation = atten_max;
             real_wl = wavelength;
             hz = AOFilter.HZ_Current;
 
@@ -753,7 +763,7 @@ namespace ValidationAOF
             {
                 att_mid = (att_l + att_r) / 2d;
 
-                if((float) wavelength >= AOFilter.WL_Min && (float) wavelength <= AOFilter.WL_Max && (float)att_mid >= 1700 && (float)att_mid <= 2500)
+                if((float) wavelength >= AOFilter.WL_Min && (float) wavelength <= AOFilter.WL_Max && (float)att_mid >= atten_min && (float)att_mid <= atten_max)
                 {
                     (AOFilter as STC_Filter).Set_Hz(AOFilter.Get_HZ_via_WL((float) wavelength), (float) att_mid);
                     Thread.Sleep(Convert.ToInt32(aof_delay));
@@ -1004,7 +1014,7 @@ namespace ValidationAOF
                             if (dataToCapture.attenuationSource == AttenuationSources.Slider)
                             {
                                 float K = (float)sliderAttenuation.Value;
-                                if (K >= 1700 && K <= 2500)
+                                if (K >= atten_min && K <= atten_max)
                                 {
                                     (AOFilter as STC_Filter).Set_Hz(hz, K);
                                 }
@@ -1012,7 +1022,7 @@ namespace ValidationAOF
                             if (dataToCapture.attenuationSource == AttenuationSources.AttenCurve)
                             {
                                 float K = (float)MMath.Interp(hz, CurveAttenuation);
-                                if (K >= 1700 && K <= 2500)
+                                if (K >= atten_min && K <= atten_max)
                                 {
                                     (AOFilter as STC_Filter).Set_Hz(hz, K);
                                 }
@@ -1073,7 +1083,7 @@ namespace ValidationAOF
 
                     // 4) Добавить точку в список. Если в списке уже имеется точка с такой длиной волны, то усредняем
                     double real_WL = maximum.X; //avesta.Index2Wavelength(maxIndex); //длина волны, на которой получился максимум в реальности
-                    double maxValue = maximum.X;
+                    double maxValue = maximum.Y;
 
                     bool flag = false; //Найдена точка с равным X
 
@@ -1266,32 +1276,6 @@ namespace ValidationAOF
             return 0;
         }
 
-        /*private void CaptureAveragedSpectralCurve(in int N, out double[] avrData, bool correctSensivity = true)
-        {
-            int[][] data = new int[N][];
-            
-            for (int i = 0; i < N; i++)
-            {
-                data[i] = avesta.GetData(correctSensivity);
-            }
-
-            avrData = new double[data[0].Length];
-
-            if (data.Length > 0)
-            {
-                for (int i = 0; i < data[0].Length; i++)
-                {
-                    for (int j = 0; j < data.Length; j++)
-                    {
-                        avrData[i] += data[j][i];
-                    }
-                    avrData[i] /= data.Length;
-                }
-            }
-            else
-                throw new Exception("N should be >= 1");
-        }*/
-
         private void Capture_I_K_Click(object sender, RoutedEventArgs e)
         {
             //захват зависимости I от k
@@ -1420,7 +1404,7 @@ namespace ValidationAOF
                 while (actual_K <= dataToCapture.endCap)
                 {
                     // 1) Установить ослабление
-                    if (wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max && actual_K >= 1700 && actual_K <= 2500)
+                    if (wl >= AOFilter.WL_Min && wl <= AOFilter.WL_Max && actual_K >= atten_min && actual_K <= atten_max)
                     {
                         STCFilter.Set_Hz(hz, (float)actual_K);
                     }
@@ -1482,6 +1466,7 @@ namespace ValidationAOF
                 {
                     SaveCurve2File(CurveIntensityFromAtten, NewFileName("Curve_I_K","txt"));
                     SaveCurve2File(CurveSqrFromAtten, NewFileName("Curve_S_K", "txt"));
+                    LogWrite("Сохранено");
                 }
                 else
                     throw new Exception("Кривая отсутствует");
@@ -1489,6 +1474,7 @@ namespace ValidationAOF
             catch(Exception exc)
             {
                 MessageBox.Show(exc.Message);
+                LogWrite(exc.Message);
             }
         }
 
@@ -1695,6 +1681,19 @@ namespace ValidationAOF
             }
         }
 
+        private void LogWrite(string text)
+        {
+            if(!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(() => LogWrite(text)));
+                return;
+            }
+            else
+            {
+                logList.Items.Add(text);
+            }
+        }
+
         private void Button_SaveCurveMaxes_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -1705,6 +1704,7 @@ namespace ValidationAOF
                     SaveCurve2File(CurveSpecMaxesPx, NewFileName("Curve_MaxesPx","txt"));
                     SaveCurve2File(CurveDeviationWL, NewFileName("Curve_Deviations","txt"));
                     SaveCurve2File(CurveSqrOnWavelength, NewFileName("Curve_PowersOnWaves","txt"));
+                    LogWrite("Сохранено");
                 }
                 else
                     throw new Exception("Кривая отсутствует");
@@ -1712,6 +1712,7 @@ namespace ValidationAOF
             catch (Exception exc)
             {
                 MessageBox.Show(exc.Message);
+                LogWrite(exc.Message);
             }
         }
 
@@ -1788,6 +1789,7 @@ namespace ValidationAOF
                 if (CurvesForDev.Count > 0)
                 {
                     SaveDevFile(CurvesForDev, NewFileName(FileNameWithoutExtansion(AOFilter.Ask_loaded_dev_file()) + "_new", "dev"), AOFilter);
+                    LogWrite("Сохранено");
                 }
                 else
                     throw new Exception("Калибровочная кривая отсутствует");
@@ -1795,6 +1797,7 @@ namespace ValidationAOF
             catch (Exception exc)
             {
                 MessageBox.Show(exc.Message);
+                LogWrite(exc.Message);
             }
         }
 
