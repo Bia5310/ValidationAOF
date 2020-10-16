@@ -88,7 +88,7 @@
                             <Slider Grid.Row="1" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderWavenumber" ValueChanged="SliderWavenumber_ValueChanged"/>
                             <Slider Grid.Row="2" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderFrequency" ValueChanged="SliderFrequency_ValueChanged"/>
                             <Slider Grid.Row="3" Grid.Column="1" Margin="2" IsEnabled="False" x:Name="sliderAttenuation" ValueChanged="SliderAttenuation_ValueChanged"
-                                    Maximum="2500" Minimum="1700" Value="2500"/>
+                                    Maximum="2500" Minimum="1000" Value="2500"/>
                             <TextBlock Text="λ, нм:" Grid.Row="0" Grid.Column="0" Margin="2"/>
                             <TextBlock Text="1/λ , см⁻¹:" Grid.Row="1" Grid.Column="0" Margin="2"/>
                             <TextBlock Text="f, Hz:" Grid.Row="2" Grid.Column="0" Margin="2"/>
